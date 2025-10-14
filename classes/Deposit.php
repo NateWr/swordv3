@@ -8,23 +8,23 @@ use PKP\jobs\BaseJob;
 
 class Deposit extends BaseJob
 {
-	protected int $publicationId;
+    protected int $publicationId;
 
-	public function __construct(int $publicationId)
-	{
-		parent::__construct();
+    public function __construct(int $publicationId)
+    {
+        parent::__construct();
 
-		$this->publicationId = $publicationId;
-	}
+        $this->publicationId = $publicationId;
+    }
 
-	public function handle(): void
-	{
-		error_log('run job for publication: ' . $this->publicationId);
+    public function handle(): void
+    {
+        error_log('run job for publication: ' . $this->publicationId);
 
-		$deposit = new Swordv3();
+        $deposit = new Swordv3();
 
-		if (!$deposit->send()) {
-			throw new Exception('failed to deposit');
-		}
-	}
+        if (!$deposit->send()) {
+            throw new Exception('failed to deposit');
+        }
+    }
 }

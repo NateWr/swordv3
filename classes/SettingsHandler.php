@@ -1,4 +1,5 @@
 <?php
+
 namespace APP\plugins\generic\swordv3\classes;
 
 use APP\core\Request;
@@ -19,7 +20,7 @@ class SettingsHandler extends Handler
     public function add($args, Request $request): void
     {
         response()->json(['name' => 'test response received'], Response::HTTP_OK)->send();
-	}
+    }
 
     public function deposit($args, Request $request): void
     {
