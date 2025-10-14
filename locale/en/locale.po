@@ -1,0 +1,5 @@
+msgid "plugins.generic.swordv3.name"
+msgstr "SWORDv3 Deposits"
+
+msgid "plugins.generic.swordv3.description"
+msgstr "Send published metadata and PDF galleys to a repository that accepts deposits according to the SWORDv3 protocol."
