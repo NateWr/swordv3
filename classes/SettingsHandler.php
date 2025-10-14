@@ -2,6 +2,7 @@
 
 namespace APP\plugins\generic\swordv3\classes;
 
+use APP\core\Application;
 use APP\core\Request;
 use APP\facades\Repo;
 use APP\handler\Handler;
@@ -25,8 +26,14 @@ class SettingsHandler extends Handler
     public function deposit($args, Request $request): void
     {
         $submission = Repo::submission()->get(1);
+        $context = Application::get()->getRequest()->getContext();
 
-        dispatch(new Deposit($submission->getCurrentPublication()->getId()));
+        dispatch(
+            new Deposit(
+                $submission->getCurrentPublication()->getId(),
+                $context->getId()
+            )
+        );
 
         $request->redirect(null, 'management', 'settings', ['distribution'], null, 'swordv3');
     }
