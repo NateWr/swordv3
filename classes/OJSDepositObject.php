@@ -7,6 +7,7 @@ use APP\facades\Repo;
 use APP\journal\Journal;
 use APP\plugins\generic\swordv3\swordv3Client\DepositObject;
 use APP\plugins\generic\swordv3\swordv3Client\MetadataDocument;
+use APP\plugins\generic\swordv3\swordv3Client\StatusDocument;
 use APP\publication\Publication;
 use APP\submission\Submission;
 use Illuminate\Support\LazyCollection;
@@ -25,8 +26,15 @@ class OJSDepositObject extends DepositObject
         public Submission $submission,
         public Journal $context,
     ) {
-        $this->metadata = $this->createDCMetadataDocument($publication, $submission, $context);
-        $this->fileset = $this->getFileset($galleys)->all();
+        $statusDocument = null;
+        if ($publication->getData('swordv3')) {
+            $statusDocument = new StatusDocument($publication->getData('swordv3'));
+        }
+        parent::__construct(
+            metadata: $this->createDCMetadataDocument($publication, $submission, $context),
+            fileset:  $this->getFileset($galleys)->all(),
+            statusDocument: $statusDocument,
+        );
     }
 
     /**

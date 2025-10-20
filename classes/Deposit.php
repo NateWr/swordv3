@@ -59,7 +59,6 @@ class Deposit extends BaseJob
         $client = new Client(
             httpClient: Application::get()->getHttpClient(),
             service: $service,
-            object: $depositObject,
         );
 
         try {
@@ -67,19 +66,18 @@ class Deposit extends BaseJob
             if (!is_array($serviceDocument->authentication) || !in_array($service->authMode, $serviceDocument->authentication)) {
                 throw new AuthenticationUnsupported($service, $serviceDocument);
             }
-            $statusDocument = new StatusDocument($client->createObject()->getBody());
-            $depositObject->setStatusDocument($statusDocument);
+            $statusDocument = new StatusDocument($client->createObject($depositObject->metadata)->getBody());
+            $this->savePublicationStatusDocument($depositObject->publication, $statusDocument);
             if (count($depositObject->fileset)) {
                 if (!$statusDocument->getFileSetUrl()) {
-                    throw new FilesNotSupported($statusDocument, $service, $depositObject);
+                    throw new FilesNotSupported($statusDocument, $service);
                 }
                 foreach ($depositObject->fileset as $file) {
-                    $response = $client->createObjectFile($file);
+                    $response = $client->createObjectFile($statusDocument->getObjectId(), $file);
                 }
             }
-            $statusDocument = new StatusDocument($client->getStatusDocument()->getBody());
-            $depositObject->setStatusDocument($statusDocument);
-            $this->savePublicationStatus($depositObject->publication, $depositObject->statusDocument);
+            $statusDocument = new StatusDocument($client->getStatusDocument($statusDocument->getObjectId())->getBody());
+            $this->savePublicationStatusDocument($depositObject->publication, $statusDocument);
         } catch (AuthenticationUnsupported|AuthenticationRequired|AuthenticationFailed $exception) {
             // TODO: send email to admin
             // TODO: disable all sending to this service for now.
@@ -100,7 +98,7 @@ class Deposit extends BaseJob
         }
     }
 
-    protected function savePublicationStatus(Publication $publication, StatusDocument $statusDocument): void
+    protected function savePublicationStatusDocument(Publication $publication, StatusDocument $statusDocument): void
     {
         $newPublication = Repo::publication()->newDataObject(
             array_merge(

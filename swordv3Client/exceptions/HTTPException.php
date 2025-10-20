@@ -17,7 +17,6 @@ class HTTPException extends Exception
         public ClientException $clientException,
         public ResponseInterface $response,
         public Service $service,
-        public DepositObject $depositObject,
     ) {
         parent::__construct($this->message());
     }

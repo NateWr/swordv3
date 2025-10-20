@@ -7,7 +7,6 @@ use APP\plugins\generic\swordv3\swordv3Client\exceptions\AuthenticationRequired;
 use APP\plugins\generic\swordv3\swordv3Client\exceptions\BadRequest;
 use APP\plugins\generic\swordv3\swordv3Client\exceptions\HTTPException;
 use APP\plugins\generic\swordv3\swordv3Client\exceptions\PageNotFound;
-use Exception;
 use GuzzleHttp\Client as GuzzleHttpClient;
 use GuzzleHttp\Exception\ClientException;
 use Psr\Http\Message\ResponseInterface;
@@ -19,12 +18,9 @@ class Client
 
     public const DEFAULT_METADATA_FORMAT = 'http://purl.org/net/sword/3.0/types/Metadata';
 
-    protected array $serviceDocument;
-
     public function __construct(
         public GuzzleHttpClient $httpClient,
         public Service $service,
-        public DepositObject $object,
     ) {
         //
     }
@@ -50,24 +46,28 @@ class Client
             );
         } catch (ClientException $exception) {
             $exceptionClass = $this->getHTTPException($exception);
-            throw new $exceptionClass($exception, $exception->getResponse(), $this->service, $this->object);
+            throw new $exceptionClass($exception, $exception->getResponse(), $this->service);
         }
         return $response;
     }
 
     /**
+     * Get a StatusDocument for a particular object in a Swordv3 server
+     *
      * @throws AuthenticationRequired
      * @throws AuthenticationFailed
      * @throws BadRequest
      * @throws PageNotFound
      * @throws HTTPException
+     *
+     * @return ResponseInterface Response body should contain Swordv3 StatusDocument
      */
-    public function getStatusDocument(): ResponseInterface
+    public function getStatusDocument(string $objectUrl): ResponseInterface
     {
         try {
             $response = $this->httpClient->request(
                 'GET',
-                $this->object->statusDocument->getObjectId(),
+                $objectUrl,
                 [
                     'headers' => [
                         'Authorization' => 'APIKey ' . $this->service->apiKey,
@@ -76,13 +76,13 @@ class Client
             );
         } catch (ClientException $exception) {
             $exceptionClass = $this->getHTTPException($exception);
-            throw new $exceptionClass($exception, $exception->getResponse(), $this->service, $this->object);
+            throw new $exceptionClass($exception, $exception->getResponse(), $this->service);
         }
         return $response;
     }
 
     /**
-     * Create a new object with metadata.
+     * Create a new object on the Swordv3 server
      *
      * @throws AuthenticationRequired
      * @throws AuthenticationFailed
@@ -91,8 +91,10 @@ class Client
      * @throws HTTPException
      *
      * @see https://swordapp.github.io/swordv3/swordv3.html#9.6
+     *
+     * @return ResponseInterface Response body should contain Swordv3 StatusDocument
      */
-    public function createObject(): ResponseInterface
+    public function createObject(MetadataDocument $metadata): ResponseInterface
     {
         try {
             $response = $this->httpClient->request(
@@ -105,32 +107,34 @@ class Client
                         'Authorization' => $this->getAuthorizationHeader(),
                         'Metadata-Format' => self::DEFAULT_METADATA_FORMAT,
                     ],
-                    'body' => $this->object->metadata->toJson(),
+                    'body' => $metadata->toJson(),
                 ]
             );
         } catch (ClientException $exception) {
             $exceptionClass = $this->getHTTPException($exception);
-            throw new $exceptionClass($exception, $exception->getResponse(), $this->service, $this->object);
+            throw new $exceptionClass($exception, $exception->getResponse(), $this->service);
         }
 
         return $response;
     }
 
     /**
-     * Deposit a file to an existing object
+     * Append a file to an existing object on the Swordv3 server
      *
      * @throws AuthenticationRequired
      * @throws AuthenticationFailed
      * @throws BadRequest
      * @throws PageNotFound
      * @throws HTTPException
+     *
+     * @return ResponseInterface Response body should contain Swordv3 StatusDocument
      */
-    public function createObjectFile(string $filepath): ResponseInterface
+    public function createObjectFile(string $objectUrl, string $filepath): ResponseInterface
     {
         try {
             $response = $this->httpClient->request(
                 'POST',
-                $this->object->statusDocument->getObjectId(),
+                $objectUrl,
                 [
                     'headers' => [
                         'Authorization' => $this->getAuthorizationHeader(),
@@ -142,7 +146,7 @@ class Client
             );
         } catch (ClientException $exception) {
             $exceptionClass = $this->getHTTPException($exception);
-            throw new $exceptionClass($exception, $exception->getResponse(), $this->service, $this->object);
+            throw new $exceptionClass($exception, $exception->getResponse(), $this->service);
         }
 
         return $response;
