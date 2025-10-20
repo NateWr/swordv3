@@ -23,6 +23,7 @@ class Swordv3Plugin extends GenericPlugin
             Hook::add('TemplateManager::display', $this->getSettingsForm(...));
             Hook::add('Template::Settings::distribution', $this->addSettingsPage(...));
             Hook::add('LoadHandler', $this->setSettingsHandler(...));
+            Hook::add('Schema::get::publication', $this->addToPublicationSchema(...));
         }
         return $success;
     }
@@ -115,6 +116,17 @@ class Swordv3Plugin extends GenericPlugin
             $handler = new SettingsHandler($this);
             return true;
         }
+        return false;
+    }
+
+    public function addToPublicationSchema(string $hookName, array $args): bool
+    {
+        $schema = $args[0];
+        $schema->properties->swordv3 = (object) [
+            'type' => 'string',
+            'validation' => ['nullable'],
+        ];
+
         return false;
     }
 }

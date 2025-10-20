@@ -6,20 +6,20 @@ use APP\core\Application;
 use APP\facades\Repo;
 use APP\journal\Journal;
 use APP\journal\JournalDAO;
-use APP\plugins\generic\swordv3\classes\swordv3\Swordv3;
 use APP\plugins\generic\swordv3\swordv3Client\Client;
-use APP\plugins\generic\swordv3\swordv3Client\DepositObject;
-use APP\plugins\generic\swordv3\swordv3Client\MetadataDocument;
+use APP\plugins\generic\swordv3\swordv3Client\exceptions\AuthenticationFailed;
+use APP\plugins\generic\swordv3\swordv3Client\exceptions\AuthenticationRequired;
+use APP\plugins\generic\swordv3\swordv3Client\exceptions\AuthenticationUnsupported;
+use APP\plugins\generic\swordv3\swordv3Client\exceptions\BadRequest;
+use APP\plugins\generic\swordv3\swordv3Client\exceptions\FilesNotSupported;
+use APP\plugins\generic\swordv3\swordv3Client\exceptions\HTTPException;
+use APP\plugins\generic\swordv3\swordv3Client\Service;
+use APP\plugins\generic\swordv3\swordv3Client\StatusDocument;
 use APP\publication\Publication;
-use APP\submission\Submission;
 use Exception;
-use Illuminate\Support\LazyCollection;
-use PKP\context\Context;
-use PKP\controlledVocab\ControlledVocab;
-use PKP\core\PKPString;
 use PKP\db\DAORegistry;
-use PKP\galley\Galley;
 use PKP\jobs\BaseJob;
+use Throwable;
 
 class Deposit extends BaseJob
 {
@@ -32,127 +32,85 @@ class Deposit extends BaseJob
 
     public function handle(): void
     {
-        error_log('run job for publication: ' . $this->publicationId);
-
         $publication = Repo::publication()->get($this->publicationId);
         $galleys = Repo::galley()->getCollector()
-                ->filterByPublicationIds([$publication->getData('currentPublicationId')])
+                ->filterByPublicationIds([$publication->getId()])
                 ->getMany();
         $submission = Repo::submission()->get($publication->getData('submissionId'));
-
-        $depositObject = $this->createDepositObject($publication, $galleys, $submission);
-
-        $deposit = new Client(
-            httpClient: Application::get()->getHttpClient(),
-            serviceUrl: 'http://host.docker.internal:3000/service-url',
-            apiKey: 'Te8#eFYLmIvOIy9&^K!0PvT@JeIw@C&G',
-            object: $depositObject,
-        );
-
-        if (!$deposit->send()) {
-            throw new Exception('failed to deposit');
-        }
-    }
-
-    public function createDepositObject(
-        Publication $publication,
-        /** LazyCollection<int,Galley> */
-        LazyCollection $galleys,
-        Submission $submission
-    ) {
-        $request = Application::get()->getRequest();
         /** @var JournalDAO $contextDao */
         $contextDao = DAORegistry::getDAO('JournalDAO');
         /** @var Journal $context */
         $context = $contextDao->getById($this->contextId);
 
-
-        $url = $request->url(
-            $context->getPath(),
-            'article',
-            'view',
-            [$publication->getData('submissionId')]
+        $depositObject = new OJSDepositObject(
+            $publication,
+            $galleys,
+            $submission,
+            $context
         );
 
-        $metadata = new MetadataDocument(_id: $url);
-        $metadata->set('dc:title', $publication->getLocalizedFullTitle($publication->getData('locale')));
-        $metadata->set('dc:creator', $publication->getShortAuthorString($publication->getData('locale')));
-        $metadata->set('dc:description', PKPString::html2text($publication->getData('abstract', $publication->getData('locale')) ?? ''));
-        $metadata->set('dc:date', date('Y-m-d', strtotime($publication->getData('datePublished'))));
-        $metadata->set('dcterms:dateSubmitted', date('Y-m-d H:i:s', strtotime($submission->getData('dateSubmitted'))));
-        $metadata->set('dcterms:modified', date('Y-m-d H:i:s', strtotime($publication->getData('lastModified'))));
-        $metadata->set('dc:identifier', $publication->getDoi() ?? '');
-        $metadata->set('dcterms:publisher', $this->getDCPublisher($context));
-        $metadata->set('dc:subject', $this->getDCSubject($publication));
-        $metadata->set('dc:contributor.sponsor', $this->getDCSponsor($publication));
-        $metadata->set('dc:coverage', $publication->getLocalizedData('coverage', $publication->getData('locale')) ?? '');
-        $metadata->set('dc:type', $publication->getLocalizedData('type', $publication->getData('locale')) ?? '');
-        $metadata->set('dc:source', $publication->getLocalizedData('source', $publication->getData('locale')) ?? '');
-        $metadata->set('dc:language', $publication->getData('locale'));
-        $metadata->set('dc:rights', $this->getDCRights($publication));
-        $metadata->set('dcterms:license', $publication->getData('licenseUrl') ?? '');
+        $service = new Service(
+            name: 'local test',
+            url: 'http://host.docker.internal:3000/service-url',
+            apiKey: 'Te8#eFYLmIvOIy9&^K!0PvT@JeIw@C&G',
+            authMode: Service::AUTH_API_KEY,
+        );
 
-        foreach ($metadata->get() as $key => $value) {
-            $trimmed = trim($value);
-            if (!$trimmed) {
-                $metadata->delete($key);
-            } else {
-                $metadata->set($key, $trimmed);
+        $client = new Client(
+            httpClient: Application::get()->getHttpClient(),
+            service: $service,
+            object: $depositObject,
+        );
+
+        try {
+            $serviceDocument = json_decode($client->getServiceDocument()->getBody());
+            if (!is_array($serviceDocument->authentication) || !in_array($service->authMode, $serviceDocument->authentication)) {
+                throw new AuthenticationUnsupported($service, $serviceDocument);
             }
+            $statusDocument = new StatusDocument($client->createObject()->getBody());
+            $depositObject->setStatusDocument($statusDocument);
+            if (count($depositObject->fileset)) {
+                if (!$statusDocument->getFileSetUrl()) {
+                    throw new FilesNotSupported($statusDocument, $service, $depositObject);
+                }
+                foreach ($depositObject->fileset as $file) {
+                    $response = $client->createObjectFile($file);
+                }
+            }
+            $statusDocument = new StatusDocument($client->getStatusDocument()->getBody());
+            $depositObject->setStatusDocument($statusDocument);
+            $this->savePublicationStatus($depositObject->publication, $depositObject->statusDocument);
+        } catch (AuthenticationUnsupported|AuthenticationRequired|AuthenticationFailed $exception) {
+            // TODO: send email to admin
+            // TODO: disable all sending to this service for now.
+            error_log($exception->getFile() . '::' . $exception->getLine() . ': ' . $exception->getMessage());
+            return;
+        } catch (HTTPException $exception) {
+            // TODO: send email to admin
+            error_log($exception->getFile() . '::' . $exception->getLine() . ': ' . $exception->getMessage());
+            return;
+        } catch (FilesNotSupported $exception) {
+            // TODO: send email to admin
+            error_log($exception->getFile() . '::' . $exception->getLine() . ': ' . $exception->getMessage());
+            return;
+        } catch (Throwable $exception) {
+            // TODO: log unexpected error
+            error_log($exception->getFile() . '::' . $exception->getLine() . ': ' . $exception->getMessage());
+            return;
         }
-
-        $files = [];
-
-        return new DepositObject($metadata, $files);
     }
 
-    public function getDCSubject(Publication $publication): string
+    protected function savePublicationStatus(Publication $publication, StatusDocument $statusDocument): void
     {
-        $subjects = array_merge_recursive(
-            Repo::controlledVocab()->getBySymbolic(
-                ControlledVocab::CONTROLLED_VOCAB_SUBMISSION_KEYWORD,
-                Application::ASSOC_TYPE_PUBLICATION,
-                $publication->getId()
-            ),
-            Repo::controlledVocab()->getBySymbolic(
-                ControlledVocab::CONTROLLED_VOCAB_SUBMISSION_SUBJECT,
-                Application::ASSOC_TYPE_PUBLICATION,
-                $publication->getId()
+        $newPublication = Repo::publication()->newDataObject(
+            array_merge(
+                $publication->_data, [
+                    'swordv3' => json_encode($statusDocument->getStatusDocument()),
+                ]
             )
         );
-        if ($subjects[$publication->getData('locale')]) {
-            return join(__('common.commaListSeparator'), $subjects[$publication->getData('locale')]);
-        }
-        return '';
-    }
+        Repo::publication()->dao->update($newPublication, $publication);
+        $newPublication = Repo::publication()->get($newPublication->getId());
 
-    public function getDCPublisher(Context $context): string
-    {
-        if (!empty($context->getLocalizedData('publisherInstitution', $context->getDefaultLocale()))) {
-            return $context->getLocalizedData('publisherInstitution', $context->getDefaultLocale());
-        }
-        return $context->getLocalizedName($context->getDefaultLocale());
-    }
-
-    public function getDCSponsor(Publication $publication): string
-    {
-        $sponsors = $publication->getLocalizedData('supportingAgencies', $publication->getData('locale'));
-        if ($sponsors) {
-            return join(__('common.commaListSeparator'), $sponsors);
-        }
-        return '';
-    }
-
-    public function getDCRights(Publication $publication): string
-    {
-        $copyrightHolder = $publication->getLocalizedData('copyrightHolder', $publication->getData('locale'));
-        $copyrightYear = $publication->getData('copyrightYear');
-        if ($copyrightHolder && $copyrightYear) {
-            return __('submission.copyrightStatement', [
-                'copyrightHolder' => $copyrightHolder,
-                'copyrightYear' => $copyrightYear,
-            ]);
-        }
-        return $copyrightHolder;
     }
 }
