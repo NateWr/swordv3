@@ -14,7 +14,6 @@ use APP\plugins\generic\swordv3\swordv3Client\exceptions\BadRequest;
 use APP\plugins\generic\swordv3\swordv3Client\exceptions\FilesNotSupported;
 use APP\plugins\generic\swordv3\swordv3Client\exceptions\HTTPException;
 use APP\plugins\generic\swordv3\swordv3Client\Service;
-use APP\plugins\generic\swordv3\swordv3Client\ServiceDocument;
 use APP\plugins\generic\swordv3\swordv3Client\StatusDocument;
 use APP\publication\Publication;
 use Exception;
@@ -33,30 +32,8 @@ class Deposit extends BaseJob
 
     public function handle(): void
     {
-        $publication = Repo::publication()->get($this->publicationId);
-        $galleys = Repo::galley()->getCollector()
-                ->filterByPublicationIds([$publication->getId()])
-                ->getMany();
-        $submission = Repo::submission()->get($publication->getData('submissionId'));
-        /** @var JournalDAO $contextDao */
-        $contextDao = DAORegistry::getDAO('JournalDAO');
-        /** @var Journal $context */
-        $context = $contextDao->getById($this->contextId);
-
-        $depositObject = new OJSDepositObject(
-            $publication,
-            $galleys,
-            $submission,
-            $context
-        );
-
-        $service = new Service(
-            name: 'local test',
-            url: 'http://host.docker.internal:3000/service-url',
-            apiKey: 'Te8#eFYLmIvOIy9&^K!0PvT@JeIw@C&G',
-            authMode: Service::AUTH_API_KEY,
-        );
-
+        $depositObject = $this->getDepositObject();
+        $service = $this->getService();
         $client = new Client(
             httpClient: Application::get()->getHttpClient(),
             service: $service,
@@ -67,36 +44,74 @@ class Deposit extends BaseJob
             if (!$service->supportsAuth()) {
                 throw new AuthenticationUnsupported($service);
             }
-            $statusDocument = new StatusDocument($client->createObject($depositObject->metadata)->getBody());
+
+            $response = $depositObject->statusDocument
+                ? $client->replaceObjectWithMetadata($depositObject->statusDocument->getObjectId(), $depositObject->metadata)
+                : $client->createObjectWithMetadata($depositObject->metadata);
+
+            $statusDocument = new StatusDocument($response->getBody());
             $this->savePublicationStatusDocument($depositObject->publication, $statusDocument);
+
             if (count($depositObject->fileset)) {
                 if (!$statusDocument->getFileSetUrl()) {
                     throw new FilesNotSupported($statusDocument, $service);
                 }
                 foreach ($depositObject->fileset as $file) {
-                    $response = $client->createObjectFile($statusDocument->getObjectId(), $file);
+                    $response = $client->appendObjectFile($statusDocument->getObjectId(), $file);
                 }
             }
+
             $statusDocument = new StatusDocument($client->getStatusDocument($statusDocument->getObjectId())->getBody());
             $this->savePublicationStatusDocument($depositObject->publication, $statusDocument);
+
         } catch (AuthenticationUnsupported|AuthenticationRequired|AuthenticationFailed $exception) {
             // TODO: send email to admin
             // TODO: disable all sending to this service for now.
-            error_log($exception->getFile() . '::' . $exception->getLine() . ': ' . $exception->getMessage());
+            error_log($exception->getFile() . '::' . $exception->getLine() . ' ' . $exception->getMessage());
             return;
         } catch (HTTPException $exception) {
             // TODO: send email to admin
-            error_log($exception->getFile() . '::' . $exception->getLine() . ': ' . $exception->getMessage());
+            error_log($exception->getFile() . '::' . $exception->getLine() . ' ' . $exception->getMessage());
             return;
         } catch (FilesNotSupported $exception) {
             // TODO: send email to admin
-            error_log($exception->getFile() . '::' . $exception->getLine() . ': ' . $exception->getMessage());
+            error_log($exception->getFile() . '::' . $exception->getLine() . ' ' . $exception->getMessage());
             return;
         } catch (Throwable $exception) {
             // TODO: log unexpected error
-            error_log($exception->getFile() . '::' . $exception->getLine() . ': ' . $exception->getMessage());
+            error_log($exception->getFile() . '::' . $exception->getLine() . ' ' . $exception->getMessage());
             return;
         }
+    }
+
+    protected function getDepositObject(): OJSDepositObject
+    {
+        $publication = Repo::publication()->get($this->publicationId);
+        $galleys = Repo::galley()->getCollector()
+                ->filterByPublicationIds([$publication->getId()])
+                ->getMany();
+        $submission = Repo::submission()->get($publication->getData('submissionId'));
+        /** @var JournalDAO $contextDao */
+        $contextDao = DAORegistry::getDAO('JournalDAO');
+        /** @var Journal $context */
+        $context = $contextDao->getById($this->contextId);
+
+        return new OJSDepositObject(
+            $publication,
+            $galleys,
+            $submission,
+            $context
+        );
+    }
+
+    protected function getService(): Service
+    {
+        return new Service(
+            name: 'local test',
+            url: 'http://host.docker.internal:3000/service-url',
+            apiKey: 'Te8#eFYLmIvOIy9&^K!0PvT@JeIw@C&G',
+            authMode: Service::AUTH_API_KEY,
+        );
     }
 
     protected function savePublicationStatusDocument(Publication $publication, StatusDocument $statusDocument): void

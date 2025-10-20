@@ -2,18 +2,25 @@
 /**
  * Metadata Document
  *
+ * This document represents the default DublinCore metadata format.
+ * Extend the getHeaders() and toBody() methods in a child class
+ * to implement other metadata types.
+ *
  * @see https://swordapp.github.io/swordv3/swordv3.html#9.3
  */
 namespace APP\plugins\generic\swordv3\swordv3Client;
 
 class MetadataDocument
 {
+    public const DEFAULT_METADATA_FORMAT = 'http://purl.org/net/sword/3.0/types/Metadata';
+
     public function __construct(
         public string $_id,
         public string $_type = 'Metadata',
         public string $_context = 'https://swordapp.github.io/swordv3/swordv3.jsonld',
         /** URL of this metadata document in the SWORDv3 service, if previously deposited. */
         public ?string $_depositUrl = null,
+        public ?string $_metadataFormat = self::DEFAULT_METADATA_FORMAT,
         protected array $metadata = []
     ) {
         //
@@ -36,7 +43,14 @@ class MetadataDocument
         }
     }
 
-    public function toJson(): string
+    /**
+     * Convert metadata to a string to be included in the body
+     * of a HTTP request
+     *
+     * Converts to JSON following Dublin Core, SWORDv3's default
+     * metadata format.
+     */
+    public function toBody(): string
     {
 
         $doc = array_merge(
@@ -49,5 +63,17 @@ class MetadataDocument
         );
 
         return json_encode($doc, JSON_PRETTY_PRINT);
+    }
+
+    /**
+     * Get the appropriate HTTP headers for this metadata type
+     */
+    public function getHeaders(): array
+    {
+        return [
+            'Content-Type' => 'application/json',
+            'Accept' => 'application/json',
+            'Metadata-Format' => $this->_metadataFormat,
+        ];
     }
 }
