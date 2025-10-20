@@ -11,17 +11,10 @@ use Exception;
 
 class Service
 {
-    public const AUTH_BASIC = 'Basic';
-    public const AUTH_API_KEY = 'APIKey';
-    public const AUTH_OAUTH = 'Oauth';
-    public const AUTH_DIGEST = 'Digest';
-
     public function __construct(
         public string $name,
         public string $url,
-        public string $apiKey,
-        /** @var string One of the Service::AUTH_* constants */
-        public string $authMode,
+        public AuthMode $authMode,
         public ?ServiceDocument $serviceDocument = null,
     ) {
         //
@@ -35,6 +28,6 @@ class Service
         if (!$this->serviceDocument) {
             throw new Exception("Can't check supported authentication modes because a serviceDocument has not been set on this service.");
         }
-        return in_array($this->authMode, $this->serviceDocument->getAuthModes());
+        return in_array($this->authMode->getMode(), $this->serviceDocument->getAuthModes());
     }
 }

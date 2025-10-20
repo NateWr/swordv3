@@ -6,6 +6,8 @@ use APP\core\Application;
 use APP\facades\Repo;
 use APP\journal\Journal;
 use APP\journal\JournalDAO;
+use APP\plugins\generic\swordv3\swordv3Client\auth\APIKey;
+use APP\plugins\generic\swordv3\swordv3Client\auth\Basic;
 use APP\plugins\generic\swordv3\swordv3Client\Client;
 use APP\plugins\generic\swordv3\swordv3Client\exceptions\AuthenticationFailed;
 use APP\plugins\generic\swordv3\swordv3Client\exceptions\AuthenticationRequired;
@@ -16,7 +18,6 @@ use APP\plugins\generic\swordv3\swordv3Client\exceptions\HTTPException;
 use APP\plugins\generic\swordv3\swordv3Client\Service;
 use APP\plugins\generic\swordv3\swordv3Client\StatusDocument;
 use APP\publication\Publication;
-use Exception;
 use PKP\db\DAORegistry;
 use PKP\jobs\BaseJob;
 use Throwable;
@@ -109,8 +110,8 @@ class Deposit extends BaseJob
         return new Service(
             name: 'local test',
             url: 'http://host.docker.internal:3000/service-url',
-            apiKey: 'Te8#eFYLmIvOIy9&^K!0PvT@JeIw@C&G',
-            authMode: Service::AUTH_API_KEY,
+            // authMode: new Basic('swordv3', 'swordv3'),
+            authMode: new APIKey('Te8#eFYLmIvOIy9&^K!0PvT@JeIw@C&G'),
         );
     }
 

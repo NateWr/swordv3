@@ -131,18 +131,13 @@ class Client
     {
         try {
             $response = $this->httpClient->send(
-                $request->withAddedHeader('Authorization', $this->getAuthorizationHeader())
+                $request->withAddedHeader('Authorization', $this->service->authMode->getAuthorizationHeader())
             );
         } catch (ClientException $exception) {
             $exceptionClass = $this->getHTTPException($exception);
             throw new $exceptionClass($exception, $exception->getResponse(), $this->service);
         }
         return $response;
-    }
-
-    protected function getAuthorizationHeader(): string
-    {
-        return 'APIKey ' . $this->service->apiKey;
     }
 
     protected function getPdfHeaders(): array
