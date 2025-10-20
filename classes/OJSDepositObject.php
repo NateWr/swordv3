@@ -38,7 +38,7 @@ class OJSDepositObject extends DepositObject
     }
 
     /**
-     * @throws NotFoundHttp
+     * Get a file path for each Galley in the supported format
      */
     protected function getFileset(LazyCollection $galleys): LazyCollection
     {
@@ -48,12 +48,22 @@ class OJSDepositObject extends DepositObject
                 return;
             }
             $file = app()->get('file')->get($submissionFile->getData('fileId'));
-            if (!$file) {
+            if (!$file || !in_array($file->mimetype, $this->getSupportedFileFormats())) {
                 return;
             }
             return Config::getVar('files', 'files_dir') . '/' . $file->path;
         })
         ->whereNotNull();
+    }
+
+    /**
+     * What file formats are supported
+     */
+    protected function getSupportedFileFormats(): array
+    {
+        return [
+            'application/pdf',
+        ];
     }
 
     protected function createDCMetadataDocument(
