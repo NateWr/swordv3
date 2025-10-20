@@ -14,6 +14,7 @@ use APP\plugins\generic\swordv3\swordv3Client\exceptions\BadRequest;
 use APP\plugins\generic\swordv3\swordv3Client\exceptions\FilesNotSupported;
 use APP\plugins\generic\swordv3\swordv3Client\exceptions\HTTPException;
 use APP\plugins\generic\swordv3\swordv3Client\Service;
+use APP\plugins\generic\swordv3\swordv3Client\ServiceDocument;
 use APP\plugins\generic\swordv3\swordv3Client\StatusDocument;
 use APP\publication\Publication;
 use Exception;
@@ -62,9 +63,9 @@ class Deposit extends BaseJob
         );
 
         try {
-            $serviceDocument = json_decode($client->getServiceDocument()->getBody());
-            if (!is_array($serviceDocument->authentication) || !in_array($service->authMode, $serviceDocument->authentication)) {
-                throw new AuthenticationUnsupported($service, $serviceDocument);
+            $client->getServiceDocument();
+            if (!$service->supportsAuth()) {
+                throw new AuthenticationUnsupported($service);
             }
             $statusDocument = new StatusDocument($client->createObject($depositObject->metadata)->getBody());
             $this->savePublicationStatusDocument($depositObject->publication, $statusDocument);

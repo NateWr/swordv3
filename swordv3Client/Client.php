@@ -32,7 +32,7 @@ class Client
      * @throws PageNotFound
      * @throws HTTPException
      */
-    public function getServiceDocument(): ResponseInterface
+    public function getServiceDocument(): ServiceDocument
     {
         try {
             $response = $this->httpClient->request(
@@ -44,11 +44,12 @@ class Client
                     ],
                 ]
             );
+            $this->service->serviceDocument = new ServiceDocument($response->getBody());
         } catch (ClientException $exception) {
             $exceptionClass = $this->getHTTPException($exception);
             throw new $exceptionClass($exception, $exception->getResponse(), $this->service);
         }
-        return $response;
+        return $this->service->serviceDocument;
     }
 
     /**

@@ -7,6 +7,8 @@
  */
 namespace APP\plugins\generic\swordv3\swordv3Client;
 
+use Exception;
+
 class Service
 {
     public const AUTH_BASIC = 'Basic';
@@ -20,7 +22,19 @@ class Service
         public string $apiKey,
         /** @var string One of the Service::AUTH_* constants */
         public string $authMode,
+        public ?ServiceDocument $serviceDocument = null,
     ) {
         //
+    }
+
+    /**
+     * Whether or not this service supports the selected authentication mode
+     */
+    public function supportsAuth(): bool
+    {
+        if (!$this->serviceDocument) {
+            throw new Exception("Can't check supported authentication modes because a serviceDocument has not been set on this service.");
+        }
+        return in_array($this->authMode, $this->serviceDocument->getAuthModes());
     }
 }
