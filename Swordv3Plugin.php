@@ -3,9 +3,11 @@
 namespace APP\plugins\generic\swordv3;
 
 use APP\core\Application;
+use APP\facades\Repo;
 use APP\plugins\generic\swordv3\classes\listeners\DepositPublication;
 use APP\plugins\generic\swordv3\classes\ServiceForm;
 use APP\plugins\generic\swordv3\classes\SettingsHandler;
+use APP\plugins\generic\swordv3\swordv3Client\StatusDocument;
 use Illuminate\Support\Facades\Event;
 use PKP\core\PKPApplication;
 use PKP\linkAction\LinkAction;
@@ -109,6 +111,57 @@ class Swordv3Plugin extends GenericPlugin
     {
         $templateMgr = $args[1];
         $output = &$args[2];
+
+        $request = Application::get()->getRequest();
+        $context = $request->getContext();
+
+        $publications = Repo::publication()->getCollector()
+            ->filterByContextIds([$context->getId()])
+            ->getQueryBuilder()
+            ->join('publication_settings as ps', 'ps.publication_id', '=', 'p.publication_id')
+            ->where('ps.setting_name', 'swordv3Status')
+            ->select(['p.publication_id', 'ps.setting_value'])
+            ->get();
+
+        $total = $publications->count();
+        $success = $publications->filter(function($p) {
+            return in_array(
+                $p->setting_value,
+                [
+                    StatusDocument::STATE_ACCEPTED,
+                    StatusDocument::STATE_IN_PROGRESS,
+                    StatusDocument::STATE_IN_WORKFLOW,
+                    StatusDocument::STATE_INGESTED,
+                ]
+            );
+        })->count();
+        $rejected = $publications->filter(function($p) {
+            return in_array(
+                $p->setting_value,
+                [
+                    StatusDocument::STATE_REJECTED,
+                ]
+            );
+        })->count();
+        $other = $publications->filter(function($p) {
+            return !in_array(
+                $p->setting_value,
+                [
+                    StatusDocument::STATE_REJECTED,
+                    StatusDocument::STATE_ACCEPTED,
+                    StatusDocument::STATE_IN_PROGRESS,
+                    StatusDocument::STATE_IN_WORKFLOW,
+                    StatusDocument::STATE_INGESTED,
+                ]
+            );
+        })->count();
+
+        $templateMgr->assign([
+            'total' => $total,
+            'success' => $success,
+            'rejected' => $rejected,
+            'other' => $other,
+        ]);
 
         $output .= $templateMgr->fetch($this->getTemplateResource('settings.tpl'));
 
