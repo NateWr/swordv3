@@ -3,11 +3,14 @@
 namespace APP\plugins\generic\swordv3;
 
 use APP\core\Application;
+use APP\plugins\generic\swordv3\classes\listeners\DepositPublication;
 use APP\plugins\generic\swordv3\classes\ServiceForm;
 use APP\plugins\generic\swordv3\classes\SettingsHandler;
+use Illuminate\Support\Facades\Event;
 use PKP\core\PKPApplication;
 use PKP\linkAction\LinkAction;
 use PKP\linkAction\request\RedirectAction;
+use PKP\observers\events\PublicationPublished;
 use PKP\plugins\GenericPlugin;
 use PKP\plugins\Hook;
 
@@ -24,6 +27,10 @@ class Swordv3Plugin extends GenericPlugin
             Hook::add('Template::Settings::distribution', $this->addSettingsPage(...));
             Hook::add('LoadHandler', $this->setSettingsHandler(...));
             Hook::add('Schema::get::publication', $this->addToPublicationSchema(...));
+            Event::listen(
+                PublicationPublished::class,
+                DepositPublication::class,
+            );
         }
         return $success;
     }

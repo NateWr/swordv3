@@ -18,6 +18,7 @@ use APP\plugins\generic\swordv3\swordv3Client\exceptions\HTTPException;
 use APP\plugins\generic\swordv3\swordv3Client\Service;
 use APP\plugins\generic\swordv3\swordv3Client\StatusDocument;
 use APP\publication\Publication;
+use APP\submission\Submission;
 use DateTime;
 use PKP\config\Config;
 use PKP\db\DAORegistry;
@@ -28,6 +29,7 @@ class Deposit extends BaseJob
 {
     public function __construct(
         protected int $publicationId,
+        protected int $submissionId,
         protected int $contextId,
     ) {
         parent::__construct();
@@ -35,7 +37,14 @@ class Deposit extends BaseJob
 
     public function handle(): void
     {
+        $this->log("Preparing to deposit Publication {$this->publicationId}, Submission {$this->submissionId}, Context {$this->contextId}.");
+
         $depositObject = $this->getDepositObject();
+        if (!$depositObject) {
+            $this->log("Aborting deposit because no valid deposit object could be created. This could be because the publication has been deleted, is not published, or because publication, submission or context IDs do not match.");
+            return;
+        }
+
         $service = $this->getService();
         $client = new Client(
             httpClient: Application::get()->getHttpClient(),
@@ -43,7 +52,7 @@ class Deposit extends BaseJob
         );
 
         $countGalleys = count($depositObject->fileset);
-        $this->log("Preparing to deposit publication {$this->publicationId} and {$countGalleys} galleys from context {$this->contextId} in SWORDv3 service \"{$service->name}\".");
+        $this->log("Ready to deposit metadata and {$countGalleys} galleys in SWORDv3 service \"{$service->name}\".");
 
         try {
             $client->getServiceDocument();
@@ -79,7 +88,7 @@ class Deposit extends BaseJob
             foreach ($statusDocument->getLinks() as $link) {
                 $this->log("Linked resource created at {$link->{'@id'}}.");
             }
-            $this->log("Finished depositing publication {$this->publicationId}.");
+            $this->log("Deposit Complete");
 
         } catch (AuthenticationUnsupported|AuthenticationRequired|AuthenticationFailed $exception) {
             // TODO: send email to admin
@@ -99,17 +108,28 @@ class Deposit extends BaseJob
         }
     }
 
-    protected function getDepositObject(): OJSDepositObject
+    protected function getDepositObject(): ?OJSDepositObject
     {
         $publication = Repo::publication()->get($this->publicationId);
         $galleys = Repo::galley()->getCollector()
                 ->filterByPublicationIds([$publication->getId()])
                 ->getMany();
-        $submission = Repo::submission()->get($publication->getData('submissionId'));
+        $submission = Repo::submission()->get($this->submissionId);
         /** @var JournalDAO $contextDao */
         $contextDao = DAORegistry::getDAO('JournalDAO');
         /** @var Journal $context */
         $context = $contextDao->getById($this->contextId);
+
+        if (
+            !$context
+            || !$submission
+            || !$publication
+            || $publication->getData('status') !== Submission::STATUS_PUBLISHED
+            || $publication->getData('submissionId') !== $submission->getId()
+            || $submission->getData('contextId') !== $context->getId()
+        ) {
+            return null;
+        }
 
         return new OJSDepositObject(
             $publication,
@@ -147,7 +167,7 @@ class Deposit extends BaseJob
     {
         $filename = Config::getVar('files', 'files_dir') . '/swordv3.log';
         $time = (new DateTime())->format('Y-m-d h:i:s:u');
-        $deposit = "{$this->contextId}-{$this->publicationId}";
+        $deposit = "{$this->contextId}-{$this->submissionId}-{$this->publicationId}";
         try {
             file_put_contents(
                 $filename,

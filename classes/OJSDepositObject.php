@@ -73,7 +73,9 @@ class OJSDepositObject extends DepositObject
     ): MetadataDocument {
         $request = Application::get()->getRequest();
 
-        $url = $request->url(
+        $url = $request->getDispatcher()->url(
+            $request,
+            Application::ROUTE_PAGE,
             $context->getPath(),
             'article',
             'view',

@@ -31,6 +31,7 @@ class SettingsHandler extends Handler
         dispatch(
             new Deposit(
                 $submission->getCurrentPublication()->getId(),
+                $submission->getId(),
                 $context->getId()
             )
         );
