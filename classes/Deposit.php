@@ -71,7 +71,7 @@ class Deposit extends BaseJob
                 : 'Created deposit object with metadata';
             $this->log("{$actionLanguage} for publication {$this->publicationId} at {$statusDocument->getObjectId()}.");
 
-            $this->savePublicationStatusDocument($depositObject->publication, $statusDocument);
+            $this->savePublicationStatus($depositObject->publication, $statusDocument);
 
             if (count($depositObject->fileset)) {
                 if (!$statusDocument->getFileSetUrl()) {
@@ -83,7 +83,7 @@ class Deposit extends BaseJob
             }
 
             $statusDocument = new StatusDocument($client->getStatusDocument($statusDocument->getObjectId())->getBody());
-            $this->savePublicationStatusDocument($depositObject->publication, $statusDocument);
+            $this->savePublicationStatus($depositObject->publication, $statusDocument);
 
             foreach ($statusDocument->getLinks() as $link) {
                 $this->log("Linked resource created at {$link->{'@id'}}.");
@@ -149,12 +149,14 @@ class Deposit extends BaseJob
         );
     }
 
-    protected function savePublicationStatusDocument(Publication $publication, StatusDocument $statusDocument): void
+    protected function savePublicationStatus(Publication $publication, StatusDocument $statusDocument): void
     {
         $newPublication = Repo::publication()->newDataObject(
             array_merge(
                 $publication->_data, [
-                    'swordv3' => json_encode($statusDocument->getStatusDocument()),
+                    'swordv3DateDeposited' => (new DateTime()->format('Y-m-d h:i:s')),
+                    'swordv3Status' => $statusDocument->getSwordStateId(),
+                    'swordv3StatusDocument' => json_encode($statusDocument->getStatusDocument()),
                 ]
             )
         );
@@ -166,7 +168,7 @@ class Deposit extends BaseJob
     protected function log(string $msg): void
     {
         $filename = Config::getVar('files', 'files_dir') . '/swordv3.log';
-        $time = (new DateTime())->format('Y-m-d h:i:s:u');
+        $time = (new DateTime())->format('Y-m-d h:i:s');
         $deposit = "{$this->contextId}-{$this->submissionId}-{$this->publicationId}";
         try {
             file_put_contents(

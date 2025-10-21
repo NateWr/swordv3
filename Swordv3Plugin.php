@@ -129,7 +129,18 @@ class Swordv3Plugin extends GenericPlugin
     public function addToPublicationSchema(string $hookName, array $args): bool
     {
         $schema = $args[0];
-        $schema->properties->swordv3 = (object) [
+        $schema->properties->swordv3DateDeposited = (object) [
+            'type' => 'string',
+            'validation' => [
+                'nullable',
+                'date_format:Y-m-d h:i:s',
+            ],
+        ];
+        $schema->properties->swordv3Status = (object) [
+            'type' => 'string',
+            'validation' => ['nullable'],
+        ];
+        $schema->properties->swordv3StatusDocument = (object) [
             'type' => 'string',
             'validation' => ['nullable'],
         ];
