@@ -1,12 +1,12 @@
 <?php
-
-namespace APP\plugins\generic\swordv3\classes;
+namespace APP\plugins\generic\swordv3\classes\jobs;
 
 use APP\core\Application;
 use APP\facades\Repo;
 use APP\journal\Journal;
 use APP\journal\JournalDAO;
 use APP\plugins\generic\swordv3\classes\exceptions\FilesNotSupported;
+use APP\plugins\generic\swordv3\classes\OJSDepositObject;
 use APP\plugins\generic\swordv3\swordv3Client\auth\APIKey;
 use APP\plugins\generic\swordv3\swordv3Client\auth\Basic;
 use APP\plugins\generic\swordv3\swordv3Client\Client;
@@ -155,7 +155,7 @@ class Deposit extends BaseJob
             array_merge(
                 $publication->_data, [
                     'swordv3DateDeposited' => (new DateTime()->format('Y-m-d h:i:s')),
-                    'swordv3Status' => $statusDocument->getSwordStateId(),
+                    'swordv3State' => $statusDocument->getSwordStateId(),
                     'swordv3StatusDocument' => json_encode($statusDocument->getStatusDocument()),
                 ]
             )

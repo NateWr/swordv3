@@ -2,7 +2,7 @@
 
 namespace APP\plugins\generic\swordv3\classes\listeners;
 
-use APP\plugins\generic\swordv3\classes\Deposit;
+use APP\plugins\generic\swordv3\classes\jobs\Deposit;
 use PKP\observers\events\PublicationPublished;
 
 class DepositPublication

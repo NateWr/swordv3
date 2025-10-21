@@ -3,3 +3,33 @@ msgstr "SWORDv3 Deposits"
 
 msgid "plugins.generic.swordv3.description"
 msgstr "Send published metadata and PDF galleys to a repository that accepts deposits according to the SWORDv3 protocol."
+
+msgid "plugins.generic.swordv3.status.pending"
+msgstr "Pending"
+
+msgid "plugins.generic.swordv3.status.pending.description"
+msgstr "Publications that have not yet been deposited."
+
+msgid "plugins.generic.swordv3.status.deposited"
+msgstr "Deposited"
+
+msgid "plugins.generic.swordv3.status.deposited.description"
+msgstr "Deposits ingested or accepted or queued for processing by the service."
+
+msgid "plugins.generic.swordv3.status.rejected"
+msgstr "Rejected"
+
+msgid "plugins.generic.swordv3.status.rejected.description"
+msgstr "Deposits rejected by the service."
+
+msgid "plugins.generic.swordv3.status.deleted"
+msgstr "Deleted"
+
+msgid "plugins.generic.swordv3.status.deleted.description"
+msgstr "Deposits deleted by the service."
+
+msgid "plugins.generic.swordv3.status.unknown"
+msgstr "Unknown"
+
+msgid "plugins.generic.swordv3.status.unknown.description"
+msgstr "Deposits in an unknown state."

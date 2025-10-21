@@ -15,8 +15,14 @@ class StatusDocument
     public const STATE_REJECTED = 'http://purl.org/net/sword/3.0/state/rejected';
     public const STATE_DELETED = 'http://purl.org/net/sword/3.0/state/deleted';
 
-    /** @var string[] $states */
-    public array $states = [
+    public const SUCCESS_STATES = [
+        self::STATE_ACCEPTED,
+        self::STATE_IN_PROGRESS,
+        self::STATE_IN_WORKFLOW,
+        self::STATE_INGESTED,
+    ];
+
+    public const STATES = [
         self::STATE_ACCEPTED,
         self::STATE_IN_PROGRESS,
         self::STATE_IN_WORKFLOW,
@@ -68,7 +74,7 @@ class StatusDocument
     public function getSwordStateId(): string
     {
         foreach ($this->statusDocument?->state ?? [] as $state) {
-            if (in_array($state?->{'@id'} ?? '', $this->states)) {
+            if (in_array($state?->{'@id'} ?? '', self::STATES)) {
                 return $state->{'@id'};
             }
         }

@@ -3,7 +3,7 @@
 namespace APP\plugins\generic\swordv3;
 
 use APP\core\Application;
-use APP\facades\Repo;
+use APP\plugins\generic\swordv3\classes\Collector;
 use APP\plugins\generic\swordv3\classes\listeners\DepositPublication;
 use APP\plugins\generic\swordv3\classes\ServiceForm;
 use APP\plugins\generic\swordv3\classes\SettingsHandler;
@@ -115,52 +115,22 @@ class Swordv3Plugin extends GenericPlugin
         $request = Application::get()->getRequest();
         $context = $request->getContext();
 
-        $publications = Repo::publication()->getCollector()
-            ->filterByContextIds([$context->getId()])
-            ->getQueryBuilder()
-            ->join('publication_settings as ps', 'ps.publication_id', '=', 'p.publication_id')
-            ->where('ps.setting_name', 'swordv3Status')
-            ->select(['p.publication_id', 'ps.setting_value'])
-            ->get();
+        $collector = new Collector($context->getId());
 
-        $total = $publications->count();
-        $success = $publications->filter(function($p) {
-            return in_array(
-                $p->setting_value,
-                [
-                    StatusDocument::STATE_ACCEPTED,
-                    StatusDocument::STATE_IN_PROGRESS,
-                    StatusDocument::STATE_IN_WORKFLOW,
-                    StatusDocument::STATE_INGESTED,
-                ]
-            );
-        })->count();
-        $rejected = $publications->filter(function($p) {
-            return in_array(
-                $p->setting_value,
-                [
-                    StatusDocument::STATE_REJECTED,
-                ]
-            );
-        })->count();
-        $other = $publications->filter(function($p) {
-            return !in_array(
-                $p->setting_value,
-                [
-                    StatusDocument::STATE_REJECTED,
-                    StatusDocument::STATE_ACCEPTED,
-                    StatusDocument::STATE_IN_PROGRESS,
-                    StatusDocument::STATE_IN_WORKFLOW,
-                    StatusDocument::STATE_INGESTED,
-                ]
-            );
-        })->count();
+        $countAll = $collector->getAllPublications()->count();
+        $allStatuses = $collector->getWithDepositState(null);
+
+        $deposited = $allStatuses->filter(fn($p) => in_array($p->setting_value, StatusDocument::SUCCESS_STATES))->count();
+        $rejected = $allStatuses->filter(fn($p) => in_array($p->setting_value, [StatusDocument::STATE_REJECTED]))->count();
+        $deleted = $allStatuses->filter(fn($p) => in_array($p->setting_value, [StatusDocument::STATE_DELETED]))->count();
+        $unknown = $allStatuses->filter(fn($p) => in_array($p->setting_value, StatusDocument::STATES))->count();
 
         $templateMgr->assign([
-            'total' => $total,
-            'success' => $success,
+            'notDeposited' => $countAll - $allStatuses->count(),
+            'deposited' => $deposited,
             'rejected' => $rejected,
-            'other' => $other,
+            'deleted' => $deleted,
+            'unknown' => $unknown,
         ]);
 
         $output .= $templateMgr->fetch($this->getTemplateResource('settings.tpl'));
@@ -189,7 +159,7 @@ class Swordv3Plugin extends GenericPlugin
                 'date_format:Y-m-d h:i:s',
             ],
         ];
-        $schema->properties->swordv3Status = (object) [
+        $schema->properties->swordv3State = (object) [
             'type' => 'string',
             'validation' => ['nullable'],
         ];

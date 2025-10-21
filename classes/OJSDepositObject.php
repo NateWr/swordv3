@@ -17,6 +17,12 @@ use PKP\controlledVocab\ControlledVocab;
 use PKP\core\PKPString;
 use PKP\galley\Galley;
 
+/**
+ * Class to map an OJS Publication to a Swordv3Client/DepositObject
+ *
+ * This creates the MetadataDocument and gets a file path for all
+ * supported galley files.
+ */
 class OJSDepositObject extends DepositObject
 {
     public function __construct(

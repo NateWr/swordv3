@@ -4,25 +4,54 @@
       <div class="flex flex-col gap-4">
         <table style="text-align: left;">
           <tr>
-            <th scope="row">Success</th>
-            <td>{$success}</td>
+            <th scope="row">
+              {translate key="plugins.generic.swordv3.status.pending"}
+            </th>
+            <td>
+              {translate key="plugins.generic.swordv3.status.pending.description"}
+            </td>
+            <td>{$notDeposited}</td>
           </tr>
           <tr>
-            <th scope="row">Rejected</th>
+            <th scope="row">
+              {translate key="plugins.generic.swordv3.status.deposited"}
+            </th>
+            <td>
+              {translate key="plugins.generic.swordv3.status.deposited.description"}
+            </td>
+            <td>{$deposited}</td>
+          </tr>
+          <tr>
+            <th scope="row">
+              {translate key="plugins.generic.swordv3.status.rejected"}
+            </th>
+            <td>
+              {translate key="plugins.generic.swordv3.status.rejected.description"}
+            </td>
             <td>{$rejected}</td>
           </tr>
           <tr>
-            <th scope="row">Other</th>
-            <td>{$other}</td>
+            <th scope="row">
+              {translate key="plugins.generic.swordv3.status.deleted"}
+            </th>
+            <td>
+              {translate key="plugins.generic.swordv3.status.deleted.description"}
+            </td>
+            <td>{$deleted}</td>
           </tr>
-          <tr style="border-top: 1px solid">
-            <th scope="row">Total</th>
-            <td>{$total}</td>
+          <tr>
+            <th scope="row">
+              {translate key="plugins.generic.swordv3.status.unknown"}
+            </th>
+            <td>
+              {translate key="plugins.generic.swordv3.status.unknown.description"}
+            </td>
+            <td>{$unknown}</td>
           </tr>
         </table>
-        <div>
-          <a href="{url page="swordv3" op="deposit"}">
-            Deposit All
+        <div class="flex items-center">
+          <a href="{url page="swordv3" op="deposit"}" class="px-2 border rounded">
+            Deposit
           </a>
         </div>
       </div>
