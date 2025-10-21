@@ -11,7 +11,7 @@ class AuthenticationUnsupported extends Exception
         public Service $service,
     ) {
 
-        $supportedModes = $service->serviceDocument?->getAuthModes() || [];
+        $supportedModes = $service->serviceDocument?->getAuthModes() ?? [];
 
         parent::__construct("SWORDv3 service {$service->name} does not support {$service->authMode}. Supported modes: {$supportedModes}");
     }

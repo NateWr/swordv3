@@ -50,4 +50,9 @@ class StatusDocument
         }
         return '';
     }
+
+    public function getLinks(): array
+    {
+        return $this->statusDocument?->links ?? [];
+    }
 }

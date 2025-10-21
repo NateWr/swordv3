@@ -135,7 +135,7 @@ class Client
             );
         } catch (ClientException $exception) {
             $exceptionClass = $this->getHTTPException($exception);
-            throw new $exceptionClass($exception, $exception->getResponse(), $this->service);
+            throw new $exceptionClass($exception, $this);
         }
         return $response;
     }
