@@ -53,6 +53,9 @@
           <a href="{url page="swordv3" op="deposit"}" class="px-2 border rounded">
             Deposit
           </a>
+          <a href="{url page="swordv3" op="reset"}" class="px-2 border rounded">
+            RESET
+          </a>
         </div>
       </div>
     </tab>

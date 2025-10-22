@@ -141,4 +141,17 @@ class SettingsHandler extends Handler
 
         $request->redirect(null, 'management', 'settings', ['distribution'], null, 'swordv3');
     }
+
+    /**
+     * Temporary method to delete all swordv3 deposit data from submissions
+     *
+     * TODO: REMOVE THIS
+     */
+    public function reset($args, Request $request): void
+    {
+        DB::table('publication_settings')
+            ->whereLike('setting_name', '%swordv3%')
+            ->delete();
+        $request->redirect(null, 'management', 'settings', ['distribution'], null, 'swordv3');
+    }
 }
