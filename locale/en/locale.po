@@ -4,6 +4,33 @@ msgstr "SWORDv3 Deposits"
 msgid "plugins.generic.swordv3.description"
 msgstr "Send published metadata and PDF galleys to a repository that accepts deposits according to the SWORDv3 protocol."
 
+msgid "plugins.generic.swordv3.service.name"
+msgstr "Service Name"
+
+msgid "plugins.generic.swordv3.service.url"
+msgstr "Service URL"
+
+msgid "plugins.generic.swordv3.service.authMode"
+msgstr "Authentication Mode"
+
+msgid "plugins.generic.swordv3.service.authMode.basic"
+msgstr "Username and Password"
+
+msgid "plugins.generic.swordv3.service.authMode.apiKey"
+msgstr "API Key"
+
+msgid "plugins.generic.swordv3.service.username"
+msgstr "Username"
+
+msgid "plugins.generic.swordv3.service.password"
+msgstr "Password"
+
+msgid "plugins.generic.swordv3.service.apiKey"
+msgstr "API Key"
+
+msgid "plugins.generic.swordv3.service.apiKey.description"
+msgstr "The unique key provided to you by the service."
+
 msgid "plugins.generic.swordv3.status.pending"
 msgstr "Pending"
 

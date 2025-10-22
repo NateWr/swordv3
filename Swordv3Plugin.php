@@ -7,7 +7,11 @@ use APP\plugins\generic\swordv3\classes\Collector;
 use APP\plugins\generic\swordv3\classes\listeners\DepositPublication;
 use APP\plugins\generic\swordv3\classes\ServiceForm;
 use APP\plugins\generic\swordv3\classes\SettingsHandler;
+use APP\plugins\generic\swordv3\swordv3Client\auth\APIKey;
+use APP\plugins\generic\swordv3\swordv3Client\auth\Basic;
+use APP\plugins\generic\swordv3\swordv3Client\Service;
 use APP\plugins\generic\swordv3\swordv3Client\StatusDocument;
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Event;
 use PKP\core\PKPApplication;
 use PKP\linkAction\LinkAction;
@@ -94,10 +98,17 @@ class Swordv3Plugin extends GenericPlugin
         $context = $request->getContext();
         $primaryLocale = $context->getPrimaryLocale();
 
+        $service = null;
+        $services = $this->getSetting($context->getId(), 'services');
+        if (is_array($services) && count($services)) {
+            $service = $services[0];
+        }
+
         $addForm = new ServiceForm(
             $dispatcher->url($request, PKPApplication::ROUTE_PAGE, $context->getPath(), 'swordv3', 'add'),
             [['key' => $primaryLocale, 'label' => $primaryLocale]],
             $context,
+            $service,
         );
 
         $components = $templateMgr->getState('components');
@@ -169,5 +180,29 @@ class Swordv3Plugin extends GenericPlugin
         ];
 
         return false;
+    }
+
+    /**
+     * @return Service[]
+     */
+    public function getServices(int $contextId): array
+    {
+        $data = $this->getSetting($contextId, 'services');
+        if (!is_array($data) || !count($data)) {
+            return [];
+        }
+
+        $services = [];
+        foreach ($data as $service) {
+            $services[] = new Service(
+                $service['name'],
+                $service['url'],
+                $service['authMode'] === 'APIKey'
+                    ? new APIKey(Crypt::decrypt($service['apiKey']))
+                    : new Basic($service['username'], Crypt::decrypt($service['password']))
+            );
+        }
+
+        return $services;
     }
 }

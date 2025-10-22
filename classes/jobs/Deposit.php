@@ -23,6 +23,7 @@ use DateTime;
 use PKP\config\Config;
 use PKP\db\DAORegistry;
 use PKP\jobs\BaseJob;
+use PKP\plugins\PluginRegistry;
 use Throwable;
 
 class Deposit extends BaseJob
@@ -31,6 +32,7 @@ class Deposit extends BaseJob
         protected int $publicationId,
         protected int $submissionId,
         protected int $contextId,
+        protected Service $service,
     ) {
         parent::__construct();
     }
@@ -45,19 +47,18 @@ class Deposit extends BaseJob
             return;
         }
 
-        $service = $this->getService();
         $client = new Client(
             httpClient: Application::get()->getHttpClient(),
-            service: $service,
+            service: $this->service,
         );
 
         $countGalleys = count($depositObject->fileset);
-        $this->log("Ready to deposit metadata and {$countGalleys} galleys in SWORDv3 service \"{$service->name}\".");
+        $this->log("Ready to deposit metadata and {$countGalleys} galleys in SWORDv3 service \"{$this->service->name}\".");
 
         try {
             $client->getServiceDocument();
-            if (!$service->supportsAuth()) {
-                throw new AuthenticationUnsupported($service);
+            if (!$this->service->supportsAuth()) {
+                throw new AuthenticationUnsupported($this->service);
             }
 
             $response = $depositObject->statusDocument
@@ -75,7 +76,7 @@ class Deposit extends BaseJob
 
             if (count($depositObject->fileset)) {
                 if (!$statusDocument->getFileSetUrl()) {
-                    throw new FilesNotSupported($statusDocument, $service);
+                    throw new FilesNotSupported($statusDocument, $this->service);
                 }
                 foreach ($depositObject->fileset as $file) {
                     $response = $client->appendObjectFile($statusDocument->getObjectId(), $file);
@@ -136,16 +137,6 @@ class Deposit extends BaseJob
             $galleys,
             $submission,
             $context
-        );
-    }
-
-    protected function getService(): Service
-    {
-        return new Service(
-            name: 'local test',
-            url: 'http://host.docker.internal:3000/service-url',
-            // authMode: new Basic('swordv3', 'swordv3'),
-            authMode: new APIKey('Te8#eFYLmIvOIy9&^K!0PvT@JeIw@C&G'),
         );
     }
 

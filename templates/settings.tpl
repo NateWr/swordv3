@@ -49,7 +49,7 @@
             <td>{$unknown}</td>
           </tr>
         </table>
-        <div class="flex items-center">
+        <div class="flex items-center gap-4">
           <a href="{url page="swordv3" op="deposit"}" class="px-2 border rounded">
             Deposit
           </a>
