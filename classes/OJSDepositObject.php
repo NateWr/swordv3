@@ -132,7 +132,7 @@ class OJSDepositObject extends DepositObject
                 $publication->getId()
             )
         );
-        if ($subjects[$publication->getData('locale')]) {
+        if (isset($subjects[$publication->getData('locale')])) {
             return join(__('common.commaListSeparator'), $subjects[$publication->getData('locale')]);
         }
         return '';
