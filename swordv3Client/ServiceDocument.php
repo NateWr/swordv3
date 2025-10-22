@@ -29,4 +29,14 @@ class ServiceDocument
     {
         return $this->serviceDocument?->authentication;
     }
+
+    public function supportsAuthMode(string $authMode): bool
+    {
+        return in_array($authMode, $this->getAuthModes());
+    }
+
+    public function acceptDeposits(): bool
+    {
+        return (bool) $this->serviceDocument?->acceptDeposits;
+    }
 }

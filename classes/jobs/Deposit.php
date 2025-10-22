@@ -5,6 +5,7 @@ use APP\core\Application;
 use APP\facades\Repo;
 use APP\journal\Journal;
 use APP\journal\JournalDAO;
+use APP\plugins\generic\swordv3\classes\exceptions\DepositsNotAccepted;
 use APP\plugins\generic\swordv3\classes\exceptions\FilesNotSupported;
 use APP\plugins\generic\swordv3\classes\OJSDepositObject;
 use APP\plugins\generic\swordv3\swordv3Client\auth\APIKey;
@@ -15,6 +16,8 @@ use APP\plugins\generic\swordv3\swordv3Client\exceptions\AuthenticationRequired;
 use APP\plugins\generic\swordv3\swordv3Client\exceptions\AuthenticationUnsupported;
 use APP\plugins\generic\swordv3\swordv3Client\exceptions\BadRequest;
 use APP\plugins\generic\swordv3\swordv3Client\exceptions\HTTPException;
+use APP\plugins\generic\swordv3\swordv3Client\exceptions\Swordv3ConnectException;
+use APP\plugins\generic\swordv3\swordv3Client\exceptions\Swordv3RequestException;
 use APP\plugins\generic\swordv3\swordv3Client\Service;
 use APP\plugins\generic\swordv3\swordv3Client\StatusDocument;
 use APP\publication\Publication;
@@ -56,9 +59,12 @@ class Deposit extends BaseJob
         $this->log("Ready to deposit metadata and {$countGalleys} galleys in SWORDv3 service \"{$this->service->name}\".");
 
         try {
-            $client->getServiceDocument();
-            if (!$this->service->supportsAuth()) {
-                throw new AuthenticationUnsupported($this->service);
+            $serviceDocument = $client->getServiceDocument();
+            if (!$serviceDocument->supportsAuthMode($this->service->authMode->getMode())) {
+                throw new AuthenticationUnsupported($this->service, $serviceDocument);
+            }
+            if (!$serviceDocument->acceptDeposits()) {
+                throw new DepositsNotAccepted($this->service, $serviceDocument);
             }
 
             $response = $depositObject->statusDocument
@@ -94,11 +100,16 @@ class Deposit extends BaseJob
         } catch (AuthenticationUnsupported|AuthenticationRequired|AuthenticationFailed $exception) {
             // TODO: send email to admin
             // TODO: disable all sending to this service for now.
-            $this->log("Authentication error encountered at {$exception->clientException->getRequest()->getUri()}\n  {$exception->getMessage()}");
+            $this->log("Authentication error encountered at {$exception->requestException->getRequest()->getUri()}\n  {$exception->getMessage()}");
             return;
-        } catch (HTTPException $exception) {
+        } catch (Swordv3RequestException $exception) {
             // TODO: send email to admin
-            $this->log("HTTP error encountered at {$exception->clientException->getRequest()->getUri()}\n  {$exception->getMessage()}");
+            $this->log("HTTP error encountered at {$exception->requestException->getRequest()->getUri()}\n  {$exception->getMessage()}");
+            return;
+        } catch (Swordv3ConnectException $exception) {
+            // TODO: send email to admin
+            // TODO: re-schedule job and track repeated failures?
+            $this->log("HTTP error encountered at {$exception->connectException->getRequest()->getUri()}\n  {$exception->getMessage()}");
             return;
         } catch (FilesNotSupported $exception) {
             // TODO: send email to admin
@@ -109,6 +120,10 @@ class Deposit extends BaseJob
         }
     }
 
+    /**
+     * Get a DepositObject that can be passed to the Swordv3 client
+     * for deposit.
+     */
     protected function getDepositObject(): ?OJSDepositObject
     {
         $publication = Repo::publication()->get($this->publicationId);
@@ -140,6 +155,10 @@ class Deposit extends BaseJob
         );
     }
 
+    /**
+     * Store the StatusDocument and other metadata related to the deposit
+     * action in the Publication settings
+     */
     protected function savePublicationStatus(Publication $publication, StatusDocument $statusDocument): void
     {
         $newPublication = Repo::publication()->newDataObject(
@@ -156,6 +175,9 @@ class Deposit extends BaseJob
 
     }
 
+    /**
+     * Write to a deposit log file
+     */
     protected function log(string $msg): void
     {
         $filename = Config::getVar('files', 'files_dir') . '/swordv3.log';

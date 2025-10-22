@@ -126,23 +126,31 @@ class Swordv3Plugin extends GenericPlugin
         $request = Application::get()->getRequest();
         $context = $request->getContext();
 
-        $collector = new Collector($context->getId());
+        $services = $this->getServices($context->getId());
+        if (!count($services)) {
+            $templateMgr->assign([
+                'swordv3Configured' => false,
+            ]);
+        } else {
+            $collector = new Collector($context->getId());
 
-        $countAll = $collector->getAllPublications()->count();
-        $allStatuses = $collector->getWithDepositState(null);
+            $countAll = $collector->getAllPublications()->count();
+            $allStatuses = $collector->getWithDepositState(null);
 
-        $deposited = $allStatuses->filter(fn($p) => in_array($p->setting_value, StatusDocument::SUCCESS_STATES))->count();
-        $rejected = $allStatuses->filter(fn($p) => in_array($p->setting_value, [StatusDocument::STATE_REJECTED]))->count();
-        $deleted = $allStatuses->filter(fn($p) => in_array($p->setting_value, [StatusDocument::STATE_DELETED]))->count();
-        $unknown = $allStatuses->filter(fn($p) => in_array($p->setting_value, StatusDocument::STATES))->count();
+            $deposited = $allStatuses->filter(fn($p) => in_array($p->setting_value, StatusDocument::SUCCESS_STATES))->count();
+            $rejected = $allStatuses->filter(fn($p) => in_array($p->setting_value, [StatusDocument::STATE_REJECTED]))->count();
+            $deleted = $allStatuses->filter(fn($p) => in_array($p->setting_value, [StatusDocument::STATE_DELETED]))->count();
+            $unknown = $allStatuses->filter(fn($p) => in_array($p->setting_value, StatusDocument::STATES))->count();
 
-        $templateMgr->assign([
-            'notDeposited' => $countAll - $allStatuses->count(),
-            'deposited' => $deposited,
-            'rejected' => $rejected,
-            'deleted' => $deleted,
-            'unknown' => $unknown,
-        ]);
+            $templateMgr->assign([
+                'swordv3Configured' => true,
+                'notDeposited' => $countAll - $allStatuses->count(),
+                'deposited' => $deposited,
+                'rejected' => $rejected,
+                'deleted' => $deleted,
+                'unknown' => $unknown,
+            ]);
+        }
 
         $output .= $templateMgr->fetch($this->getTemplateResource('settings.tpl'));
 
@@ -194,15 +202,20 @@ class Swordv3Plugin extends GenericPlugin
 
         $services = [];
         foreach ($data as $service) {
-            $services[] = new Service(
-                $service['name'],
-                $service['url'],
-                $service['authMode'] === 'APIKey'
-                    ? new APIKey(Crypt::decrypt($service['apiKey']))
-                    : new Basic($service['username'], Crypt::decrypt($service['password']))
-            );
+            $services[] = $this->getServiceFromPluginSettings($service);
         }
 
         return $services;
+    }
+
+    public function getServiceFromPluginSettings(array $service): Service
+    {
+        return new Service(
+            $service['name'],
+            $service['url'],
+            $service['authMode'] === 'APIKey'
+                ? new APIKey(Crypt::decrypt($service['apiKey']))
+                : new Basic($service['username'], Crypt::decrypt($service['password']))
+        );
     }
 }

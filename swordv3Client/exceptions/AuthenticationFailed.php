@@ -2,7 +2,7 @@
 
 namespace APP\plugins\generic\swordv3\swordv3Client\exceptions;
 
-class AuthenticationFailed extends HTTPException
+class AuthenticationFailed extends Swordv3RequestException
 {
     //
 }

@@ -11,7 +11,16 @@ msgid "plugins.generic.swordv3.service.url"
 msgstr "Service URL"
 
 msgid "plugins.generic.swordv3.service.authMode"
-msgstr "Authentication Mode"
+msgstr "Authentication Method"
+
+msgid "plugins.generic.swordv3.service.authMode.unsupported"
+msgstr "The {$authMode} authentication method is not supported by this service."
+
+msgid "plugins.generic.swordv3.service.authMode.userPassFailed"
+msgstr "The username or password are incorrect."
+
+msgid "plugins.generic.swordv3.service.authMode.apiKeyFailed"
+msgstr "The API Key is incorrect."
 
 msgid "plugins.generic.swordv3.service.authMode.basic"
 msgstr "Username and Password"
@@ -30,6 +39,12 @@ msgstr "API Key"
 
 msgid "plugins.generic.swordv3.service.apiKey.description"
 msgstr "The unique key provided to you by the service."
+
+msgid "plugins.generic.swordv3.service.setupFailed"
+msgstr "Can't connect to the service. Please check the details and try again. If the problem persists, please contact the service provider for help."
+
+msgid "plugins.generic.swordv3.service.depositsNotAccepted"
+msgstr "Connected successfully to the service, but it does not accept deposits. Please contact the service provider for more information."
 
 msgid "plugins.generic.swordv3.status.pending"
 msgstr "Pending"

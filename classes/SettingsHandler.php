@@ -5,15 +5,21 @@ namespace APP\plugins\generic\swordv3\classes;
 use APP\core\Application;
 use APP\core\Request;
 use APP\handler\Handler;
+use APP\plugins\generic\swordv3\classes\exceptions\DepositsNotAccepted;
 use APP\plugins\generic\swordv3\classes\jobs\Deposit;
-use APP\plugins\generic\swordv3\swordv3Client\auth\APIKey;
-use APP\plugins\generic\swordv3\swordv3Client\auth\Basic;
+use APP\plugins\generic\swordv3\swordv3Client\Client;
+use APP\plugins\generic\swordv3\swordv3Client\exceptions\AuthenticationFailed;
+use APP\plugins\generic\swordv3\swordv3Client\exceptions\AuthenticationUnsupported;
+use APP\plugins\generic\swordv3\swordv3Client\exceptions\Swordv3ConnectException;
+use APP\plugins\generic\swordv3\swordv3Client\exceptions\Swordv3RequestException;
 use APP\plugins\generic\swordv3\swordv3Client\Service;
+use APP\plugins\generic\swordv3\swordv3Client\ServiceDocument;
 use APP\plugins\generic\swordv3\Swordv3Plugin;
 use Exception;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
+use Throwable;
 
 class SettingsHandler extends Handler
 {
@@ -77,8 +83,7 @@ class SettingsHandler extends Handler
             'authMode' => $authMode,
         ];
 
-        // Encrypt the password or if it is the same as the already stored
-        // password don't change it.
+        // Encrypt a new password/api key if it has changed
         if ($authMode === 'Basic') {
             $data['username'] = $username;
             $data['password'] = $service['password'] && $service['password'] === $password
@@ -88,6 +93,43 @@ class SettingsHandler extends Handler
             $data['apiKey'] = $service['apiKey'] && $service['apiKey'] === $apiKey
                 ? $service['apiKey']
                 : Crypt::encrypt($apiKey);
+        }
+
+        $service = $this->plugin->getServiceFromPluginSettings($data);
+
+        try {
+            $serviceDocument = $this->getServiceDocument($service);
+            if (!$serviceDocument->supportsAuthMode($service->authMode->getMode())) {
+                throw new AuthenticationUnsupported($service, $serviceDocument);
+            }
+            if (!$serviceDocument->acceptDeposits()) {
+                throw new DepositsNotAccepted($service, $serviceDocument);
+            }
+        } catch (AuthenticationUnsupported $exception) {
+            $nameAuthMode = $authMode === 'Basic'
+                ? __('plugins.generic.swordv3.service.authMode.basic')
+                : __('plugins.generic.swordv3.service.authMode.apiKey');
+            $errors['authMode'] = [__(
+                'plugins.generic.swordv3.service.authMode.unsupported',
+                ['authMode' => $nameAuthMode]
+            )];
+        } catch (AuthenticationFailed $exception) {
+            if ($authMode === 'Basic') {
+                $errors['username'] = [__('plugins.generic.swordv3.service.authMode.userPassFailed')];
+            } else {
+                $errors['apiKey'] = [__('plugins.generic.swordv3.service.authMode.apiKeyFailed')];
+            }
+        } catch (Swordv3RequestException|Swordv3ConnectException $exception) {
+            $errors['url'] = [__('plugins.generic.swordv3.service.setupFailed')];
+        } catch (DepositsNotAccepted $exception) {
+            $errors['url'] = [__('plugins.generic.swordv3.service.depositsNotAccepted')];
+        } catch (Throwable $exception) {
+            throw $exception;
+        }
+
+        if (count($errors)) {
+            response()->json($errors, Response::HTTP_BAD_REQUEST)->send();
+            exit();
         }
 
         $this->plugin->updateSetting(
@@ -153,5 +195,17 @@ class SettingsHandler extends Handler
             ->whereLike('setting_name', '%swordv3%')
             ->delete();
         $request->redirect(null, 'management', 'settings', ['distribution'], null, 'swordv3');
+    }
+
+    /**
+     * Request a ServiceDocument from a service
+     */
+    protected function getServiceDocument(Service $service): ServiceDocument
+    {
+        $client = new Client(
+            httpClient: Application::get()->getHttpClient(),
+            service: $service,
+        );
+        return $client->getServiceDocument();
     }
 }

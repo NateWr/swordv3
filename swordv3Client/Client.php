@@ -5,10 +5,12 @@ namespace APP\plugins\generic\swordv3\swordv3Client;
 use APP\plugins\generic\swordv3\swordv3Client\exceptions\AuthenticationFailed;
 use APP\plugins\generic\swordv3\swordv3Client\exceptions\AuthenticationRequired;
 use APP\plugins\generic\swordv3\swordv3Client\exceptions\BadRequest;
-use APP\plugins\generic\swordv3\swordv3Client\exceptions\HTTPException;
 use APP\plugins\generic\swordv3\swordv3Client\exceptions\PageNotFound;
+use APP\plugins\generic\swordv3\swordv3Client\exceptions\Swordv3ConnectException;
+use APP\plugins\generic\swordv3\swordv3Client\exceptions\Swordv3RequestException;
 use GuzzleHttp\Client as GuzzleHttpClient;
-use GuzzleHttp\Exception\ClientException;
+use GuzzleHttp\Exception\ConnectException;
+use GuzzleHttp\Exception\RequestException;
 use GuzzleHttp\Psr7\Request;
 use Psr\Http\Message\ResponseInterface;
 
@@ -37,8 +39,7 @@ class Client
             self::METHOD_GET,
             $this->service->url,
         ));
-        $this->service->serviceDocument = new ServiceDocument($response->getBody());
-        return $this->service->serviceDocument;
+        return new ServiceDocument($response->getBody());
     }
 
     /**
@@ -125,7 +126,7 @@ class Client
      * @throws AuthenticationFailed
      * @throws BadRequest
      * @throws PageNotFound
-     * @throws HTTPException
+     * @throws RequestException
      */
     public function send(Request $request): ResponseInterface
     {
@@ -133,9 +134,11 @@ class Client
             $response = $this->httpClient->send(
                 $request->withAddedHeader('Authorization', $this->service->authMode->getAuthorizationHeader())
             );
-        } catch (ClientException $exception) {
-            $exceptionClass = $this->getHTTPException($exception);
+        } catch (RequestException $exception) {
+            $exceptionClass = $this->getRequestException($exception);
             throw new $exceptionClass($exception, $this);
+        } catch (ConnectException $exception) {
+            throw new Swordv3ConnectException($exception, $this);
         }
         return $response;
     }
@@ -148,14 +151,14 @@ class Client
         ];
     }
 
-    protected function getHTTPException(ClientException $exception): string
+    protected function getRequestException(RequestException $exception): string
     {
         switch ($exception->getResponse()->getStatusCode()) {
             case 400: return BadRequest::class;
             case 401: return AuthenticationRequired::class;
             case 403: return AuthenticationFailed::class;
             case 404: return PageNotFound::class;
-            default: return HTTPException::class;
+            default: return Swordv3RequestException::class;
         }
     }
 }

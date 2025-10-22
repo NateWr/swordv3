@@ -1,19 +1,18 @@
 <?php
 
-namespace APP\plugins\generic\swordv3\swordv3Client\exceptions;
-
+namespace APP\plugins\generic\swordv3\classes\exceptions;
 use APP\plugins\generic\swordv3\swordv3Client\Service;
 use APP\plugins\generic\swordv3\swordv3Client\ServiceDocument;
 use Exception;
 
-class AuthenticationUnsupported extends Exception
+class DepositsNotAccepted extends Exception
 {
     public function __construct(
         public Service $service,
         public ServiceDocument $serviceDocument,
     ) {
         parent::__construct(
-            "SWORDv3 service {$service->name} does not support {$service->authMode->getMode()}. Supported modes: {$serviceDocument->getAuthModes()}"
+            "{$service->name} does not accept deposits."
         );
     }
 }

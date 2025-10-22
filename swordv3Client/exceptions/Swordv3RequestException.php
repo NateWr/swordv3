@@ -4,15 +4,15 @@ namespace APP\plugins\generic\swordv3\swordv3Client\exceptions;
 
 use APP\plugins\generic\swordv3\swordv3Client\Client;
 use Exception;
-use GuzzleHttp\Exception\ClientException;
+use GuzzleHttp\Exception\RequestException;
 
 /**
- * Exceptions related to HTTP requests to a SWORDv3 server
+ * Exceptions related to 4**, 5** response errors
  */
-class HTTPException extends Exception
+class Swordv3RequestException extends Exception
 {
     public function __construct(
-        public ClientException $clientException,
+        public RequestException $requestException,
         public Client $client,
     ) {
         parent::__construct($this->message());
@@ -20,6 +20,6 @@ class HTTPException extends Exception
 
     public function message(): string
     {
-        return $this->clientException->getMessage();
+        return $this->requestException->getMessage();
     }
 }

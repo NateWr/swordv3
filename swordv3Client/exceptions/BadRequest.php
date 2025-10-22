@@ -2,7 +2,7 @@
 
 namespace APP\plugins\generic\swordv3\swordv3Client\exceptions;
 
-class BadRequest extends HTTPException
+class BadRequest extends Swordv3RequestException
 {
     //
 }
