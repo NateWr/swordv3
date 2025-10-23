@@ -5,6 +5,7 @@ namespace APP\plugins\generic\swordv3\swordv3Client;
 use APP\plugins\generic\swordv3\swordv3Client\exceptions\AuthenticationFailed;
 use APP\plugins\generic\swordv3\swordv3Client\exceptions\AuthenticationRequired;
 use APP\plugins\generic\swordv3\swordv3Client\exceptions\BadRequest;
+use APP\plugins\generic\swordv3\swordv3Client\exceptions\DigestFormatNotFound;
 use APP\plugins\generic\swordv3\swordv3Client\exceptions\PageNotFound;
 use APP\plugins\generic\swordv3\swordv3Client\exceptions\Swordv3ConnectException;
 use APP\plugins\generic\swordv3\swordv3Client\exceptions\Swordv3RequestException;
@@ -60,28 +61,29 @@ class Client
      *
      * @return ResponseInterface Response body should contain Swordv3 StatusDocument
      */
-    public function createObjectWithMetadata(MetadataDocument $metadata): ResponseInterface
+    public function createObjectWithMetadata(MetadataDocument $metadata, ServiceDocument $serviceDocument): ResponseInterface
     {
         return $this->send(new Request(
             self::METHOD_POST,
             $this->service->url,
-            $metadata->getHeaders(),
-            $metadata->toBody(),
+            $metadata->getHeaders($serviceDocument),
+            $metadata->getRequestBody($serviceDocument),
         ));
     }
 
     /**
      * Replace an existing object on the Swordv3 server with Metadata
      *
+     * @param string $digestFormat The hash algorithm to use to create the file digest
      * @return ResponseInterface Response body should contain Swordv3 StatusDocument
      */
-    public function replaceObjectWithMetadata(string $objectUrl, MetadataDocument $metadata): ResponseInterface
+    public function replaceObjectWithMetadata(string $objectUrl, MetadataDocument $metadata, ServiceDocument $serviceDocument): ResponseInterface
     {
         return $this->send(new Request(
             self::METHOD_PUT,
             $objectUrl,
-            $metadata->getHeaders(),
-            $metadata->toBody(),
+            $metadata->getHeaders($serviceDocument),
+            $metadata->getRequestBody($serviceDocument),
         ));
     }
 
@@ -90,13 +92,13 @@ class Client
      *
      * @return ResponseInterface Response body should contain Swordv3 StatusDocument
      */
-    public function appendMetadata(string $objectUrl, MetadataDocument $metadata): ResponseInterface
+    public function appendMetadata(string $objectUrl, MetadataDocument $metadata, ServiceDocument $serviceDocument): ResponseInterface
     {
         return $this->send(new Request(
             self::METHOD_POST,
             $objectUrl,
-            $metadata->getHeaders(),
-            $metadata->toBody(),
+            $metadata->getHeaders($serviceDocument),
+            $metadata->getRequestBody($serviceDocument),
         ));
 
         return $response;
@@ -107,12 +109,12 @@ class Client
      *
      * @return ResponseInterface Response body should contain Swordv3 StatusDocument
      */
-    public function appendObjectFile(string $objectUrl, string $filepath): ResponseInterface
+    public function appendObjectFile(string $objectUrl, string $filepath, ServiceDocument $serviceDocument): ResponseInterface
     {
         return $this->send(new Request(
             self::METHOD_POST,
             $objectUrl,
-            $this->getPdfHeaders(),
+            $this->getPdfHeaders($filepath, $serviceDocument),
             fopen($filepath, 'rb'),
         ));
     }
@@ -143,11 +145,12 @@ class Client
         return $response;
     }
 
-    protected function getPdfHeaders(): array
+    protected function getPdfHeaders(string $filepath, ServiceDocument $serviceDocument): array
     {
         return [
             'Content-Type' => 'application/pdf',
             'Content-Disposition' => 'attachment; filename=document.pdf',
+            'Digest' => $this->getBinaryDigest($filepath, $serviceDocument),
         ];
     }
 
@@ -160,5 +163,36 @@ class Client
             case 404: return PageNotFound::class;
             default: return Swordv3RequestException::class;
         }
+    }
+
+    /**
+     * Create a hash of a binary file for the Digest header
+     *
+     * Identifies a hash format compatible with the service, generates
+     * the hash, and prepends the hash format.
+     *
+     * @see  https://swordapp.github.io/swordv3/swordv3.html#14
+     */
+    protected function getBinaryDigest(string $filepath, ServiceDocument $serviceDocument): string
+    {
+        $algos = hash_algos();
+
+        $digests = [];
+        foreach ($algos as $algo) {
+            $digestFormat = $serviceDocument->getDigestFormatByAlgorithm($algo);
+            if ($digestFormat && in_array($digestFormat, $serviceDocument->getDigestFormats())) {
+                $digests[] = join('', [
+                    $digestFormat,
+                    '=',
+                    hash_file($algo, $filepath)
+                ]);
+            }
+        }
+
+        if (!count($digests)) {
+            throw new DigestFormatNotFound($serviceDocument);
+        }
+
+        return join(', ', $digests);
     }
 }

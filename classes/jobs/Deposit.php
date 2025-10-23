@@ -8,17 +8,15 @@ use APP\journal\JournalDAO;
 use APP\plugins\generic\swordv3\classes\exceptions\DepositsNotAccepted;
 use APP\plugins\generic\swordv3\classes\exceptions\FilesNotSupported;
 use APP\plugins\generic\swordv3\classes\OJSDepositObject;
-use APP\plugins\generic\swordv3\swordv3Client\auth\APIKey;
-use APP\plugins\generic\swordv3\swordv3Client\auth\Basic;
 use APP\plugins\generic\swordv3\swordv3Client\Client;
 use APP\plugins\generic\swordv3\swordv3Client\exceptions\AuthenticationFailed;
 use APP\plugins\generic\swordv3\swordv3Client\exceptions\AuthenticationRequired;
 use APP\plugins\generic\swordv3\swordv3Client\exceptions\AuthenticationUnsupported;
-use APP\plugins\generic\swordv3\swordv3Client\exceptions\BadRequest;
-use APP\plugins\generic\swordv3\swordv3Client\exceptions\HTTPException;
+use APP\plugins\generic\swordv3\swordv3Client\exceptions\DigestFormatNotFound;
 use APP\plugins\generic\swordv3\swordv3Client\exceptions\Swordv3ConnectException;
 use APP\plugins\generic\swordv3\swordv3Client\exceptions\Swordv3RequestException;
 use APP\plugins\generic\swordv3\swordv3Client\Service;
+use APP\plugins\generic\swordv3\swordv3Client\ServiceDocument;
 use APP\plugins\generic\swordv3\swordv3Client\StatusDocument;
 use APP\publication\Publication;
 use APP\submission\Submission;
@@ -26,7 +24,6 @@ use DateTime;
 use PKP\config\Config;
 use PKP\db\DAORegistry;
 use PKP\jobs\BaseJob;
-use PKP\plugins\PluginRegistry;
 use Throwable;
 
 class Deposit extends BaseJob
@@ -68,8 +65,15 @@ class Deposit extends BaseJob
             }
 
             $response = $depositObject->statusDocument
-                ? $client->replaceObjectWithMetadata($depositObject->statusDocument->getObjectId(), $depositObject->metadata)
-                : $client->createObjectWithMetadata($depositObject->metadata);
+                ? $client->replaceObjectWithMetadata(
+                    $depositObject->statusDocument->getObjectId(),
+                    $depositObject->metadata,
+                    $serviceDocument
+                )
+                : $client->createObjectWithMetadata(
+                    $depositObject->metadata,
+                    $serviceDocument
+                );
 
             $statusDocument = new StatusDocument($response->getBody());
 
@@ -85,7 +89,7 @@ class Deposit extends BaseJob
                     throw new FilesNotSupported($statusDocument, $this->service);
                 }
                 foreach ($depositObject->fileset as $file) {
-                    $response = $client->appendObjectFile($statusDocument->getObjectId(), $file);
+                    $response = $client->appendObjectFile($statusDocument->getObjectId(), $file, $serviceDocument);
                 }
             }
 
@@ -111,10 +115,13 @@ class Deposit extends BaseJob
             // TODO: re-schedule job and track repeated failures?
             $this->log("HTTP error encountered at {$exception->connectException->getRequest()->getUri()}\n  {$exception->getMessage()}");
             return;
-        } catch (FilesNotSupported $exception) {
+        } catch (DigestFormatNotFound $exception) {
             // TODO: send email to admin
             $this->log($exception->getMessage());
-            return;
+        } catch (FilesNotSupported $exception) {
+            // TODO: send email to admin
+            // TODO: update status to reflect incomplete deposit
+            $this->log("Deposit aborted: {$exception->getMessage()}");
         } catch (Throwable $exception) {
             throw $exception;
         }

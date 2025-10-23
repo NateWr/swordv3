@@ -3,12 +3,15 @@
  * Metadata Document
  *
  * This document represents the default DublinCore metadata format.
- * Extend the getHeaders() and toBody() methods in a child class
+ * Extend the getHeaders() and getRequestBody() methods in a child class
  * to implement other metadata types.
  *
  * @see https://swordapp.github.io/swordv3/swordv3.html#9.3
  */
 namespace APP\plugins\generic\swordv3\swordv3Client;
+
+use APP\plugins\generic\swordv3\swordv3Client\exceptions\DigestFormatNotFound;
+use PKP\config\Config;
 
 class MetadataDocument
 {
@@ -50,7 +53,7 @@ class MetadataDocument
      * Converts to JSON following Dublin Core, SWORDv3's default
      * metadata format.
      */
-    public function toBody(): string
+    public function getRequestBody(): string
     {
 
         $doc = array_merge(
@@ -62,18 +65,50 @@ class MetadataDocument
             $this->metadata
         );
 
-        return json_encode($doc, JSON_PRETTY_PRINT);
+        return json_encode($doc);
     }
 
     /**
      * Get the appropriate HTTP headers for this metadata type
      */
-    public function getHeaders(): array
+    public function getHeaders(ServiceDocument $serviceDocument): array
     {
         return [
             'Content-Type' => 'application/json',
             'Accept' => 'application/json',
             'Metadata-Format' => $this->_metadataFormat,
+            'Digest' => $this->getDigest($serviceDocument),
         ];
+    }
+
+    /**
+     * Create a hash of the metadata document for the Digest header
+     *
+     * Identifies a hash format compatible with the service, generates
+     * the hash, and prepends the hash format.
+     *
+     * @see  https://swordapp.github.io/swordv3/swordv3.html#14
+     */
+    protected function getDigest(ServiceDocument $serviceDocument): string
+    {
+        $algos = hash_algos();
+
+        $digests = [];
+        foreach ($algos as $algo) {
+            $digestFormat = $serviceDocument->getDigestFormatByAlgorithm($algo);
+            if ($digestFormat && in_array($digestFormat, $serviceDocument->getDigestFormats())) {
+                $digests[] = join('', [
+                    $digestFormat,
+                    '=',
+                    hash($algo, $this->getRequestBody())
+                ]);
+            }
+        }
+
+        if (!count($digests)) {
+            throw new DigestFormatNotFound($serviceDocument);
+        }
+
+        return join(', ', $digests);
     }
 }

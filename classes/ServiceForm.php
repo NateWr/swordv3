@@ -44,7 +44,7 @@ class ServiceForm extends FormComponent
         $this->addField(new FieldText('username', [
             'label' => __('plugins.generic.swordv3.service.username'),
             'isRequired' => true,
-            'value' => $data ? $data['username'] : '',
+            'value' => $data && isset($data['username']) ? $data['username'] : '',
             'showWhen' => ['authMode', 'Basic'],
         ]));
 
@@ -52,7 +52,7 @@ class ServiceForm extends FormComponent
             'label' => __('plugins.generic.swordv3.service.password'),
             'isRequired' => true,
             'inputType' => 'password',
-            'value' => $data ? $data['password'] : '',
+            'value' => $data && isset($data['password']) ? $data['password'] : '',
             'optIntoEdit' => isset($data['password']),
             'optIntoEditLabel' => __('common.edit'),
             'showWhen' => ['authMode', 'Basic'],
@@ -62,7 +62,7 @@ class ServiceForm extends FormComponent
             'label' => __('plugins.generic.swordv3.service.apiKey'),
             'isRequired' => true,
             'inputType' => 'password',
-            'value' => $data ? $data['apiKey'] : '',
+            'value' => $data && isset($data['apiKey']) ? $data['apiKey'] : '',
             'optIntoEdit' => isset($data['apiKey']),
             'optIntoEditLabel' => __('common.edit'),
             'showWhen' => ['authMode', 'APIKey'],
