@@ -1,2 +1,52 @@
 # SWORDv3 plugin for OJS
 
+> This plugin is a prototype and should not be used in production.
+
+An OJS plugin to deposit article metadata and PDF galleys with a SWORDv3 service.
+
+- [x] Support Basic and APIKey authentication
+- [x] Deposit metadata in DC format
+- [x] Deposit PDF galleys
+- [x] Automatic deposit of articles as soon as they are published
+- [x] Manually deposit all previously published articles
+- [ ] Deposit to more than one service
+- [ ] Deposit individual articles manually
+- [ ] Deposit metadata in OpenAIRE/DataCite format
+- [ ] Notify admin or journal manager when deposits fail
+- [ ] UI to view each article's deposit URL, status document and error message
+- [ ] Deposit ePub, Zip, and HTML galleys
+- [ ] Deposit articles before publication
+
+## Usage
+
+This plugin requires **OJS 3.5.0-1+**. Follow these steps to install the plugin and deposit content.
+
+1. Install this plugin by copying or cloning this repository into OJS's `plugins/generic` directory.
+1. Login tp OJS as a Journal Manager or Admin.
+1. Navigate to Settings > Website > Plugins > Installed Plugins and enable the SWORDv3 Deposits plugin.
+1. Navigate to Settings > Distribution > SWORDv3 Deposits > Setup.
+1. Configure the connection settings for the SWORDv3 service.
+1. Go to Deposits to view Pending deposits.
+1. Click the Deposit button to deposit any Pending deposits.
+
+## Testing
+
+This plugin was built to work with this [example SWORDv3 server](https://github.com/NateWr/swordv3-example-serverl). Follow these instructions to run the example deposit server and test depositing to it.
+
+1. Follow the [instructions](https://github.com/NateWr/swordv3-example-serverl) to run a sample server locally.
+2. In OJS, navigate to Settings > Distribution > SWORDv3 Deposits > Setup.
+3. Enter the Service URL, which is `http://localhost:3000/service-url` by default.
+4. Choose Basic Authentication with the username `swordv3` and password `swordv3`. (If you configured an API key, you can use that instead.)
+5. Save the service setup form to test the connection and authentication settings.
+
+If the server saves successfully, you should be able to deposit to it by going to Settings > Distribution > SWORDv3 Deposits > Deposits.
+
+### Debugging
+
+All deposits are handled by OJS's [jobs queue](https://docs.pkp.sfu.ca/dev/documentation/en/utilities-jobs).
+
+- Regular application errors can be found in the server's error log.
+- The plugin creates a log of deposits at `<files_dir>/swordv3.log`.
+- The [Status Document](https://swordapp.github.io/swordv3/swordv3.html#9.6) for each publication is saved in the `publication_settings` table under the `setting_name` of `swordv3StatusDocument`.
+- The plugin treats every `Publication` as a unique object. It has not yet been determined how a SWORDv3 server will link multiple versions of an article together.
+- The Reset button can be used to clear all existing Swordv3 deposit data from `Publication` settings. It will not reset the service connection details.
