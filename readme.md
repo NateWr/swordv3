@@ -35,13 +35,35 @@ This plugin was built to work with this [example SWORDv3 server](https://github.
 
 1. Follow the [instructions](https://github.com/NateWr/swordv3-example-serverl) to run a sample server locally.
 2. In OJS, navigate to Settings > Distribution > SWORDv3 Deposits > Setup.
-3. Enter the Service URL, which is `http://localhost:3000/service-url` by default.
+3. Enter the Service URL, which is `http://localhost:3000/service-url` by default. (See the note on [using Docker](#docker)).
 4. Choose Basic Authentication with the username `swordv3` and password `swordv3`. (If you configured an API key, you can use that instead.)
 5. Save the service setup form to test the connection and authentication settings.
 
 If the server saves successfully, you should be able to deposit to it by going to Settings > Distribution > SWORDv3 Deposits > Deposits.
 
-### Debugging
+### Docker
+
+If you are running OJS from within a Docker container, it may not have access to the test server at `http://localhost`. You can get around this by using Docker's [host.docker.internal](https://www.reddit.com/r/docker/comments/ztdlo1/how_to_set_hostdockerinternal/). In my compose file, I add the following to my [OJS container](https://github.com/NateWr/pkp-docker/blob/531b2fd98021ec5da070a74ba7de2795bac4073a/compose.example.ojs-350.yaml#L19-L20):
+
+
+```yaml
+extra_hosts:
+  - "host.docker.internal:host-gateway"
+```
+
+Then, in OJS, use the following as the service URL:
+
+```
+http://host.docker.internal:3000/service-url
+```
+
+When running the test server, you may also need to add the `--host` flag:
+
+```
+npm run start -- --host
+```
+
+## Debugging
 
 All deposits are handled by OJS's [jobs queue](https://docs.pkp.sfu.ca/dev/documentation/en/utilities-jobs).
 
