@@ -19,6 +19,9 @@ use Exception;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
+use PKP\security\authorization\CanAccessSettingsPolicy;
+use PKP\security\authorization\ContextAccessPolicy;
+use PKP\security\Role;
 use Throwable;
 
 class SettingsHandler extends Handler
@@ -28,8 +31,27 @@ class SettingsHandler extends Handler
     public function __construct(Swordv3Plugin $plugin)
     {
         $this->plugin = $plugin;
+
+        $this->addRoleAssignment(
+            [Role::ROLE_ID_SITE_ADMIN, Role::ROLE_ID_MANAGER],
+            ['add', 'deposit', 'reset'],
+        );
     }
 
+    /**
+     * @copydoc PKPHandler::authorize()
+     */
+    public function authorize($request, &$args, $roleAssignments)
+    {
+        $this->addPolicy(new ContextAccessPolicy($request, $roleAssignments));
+        $this->addPolicy(new CanAccessSettingsPolicy());
+
+        return parent::authorize($request, $args, $roleAssignments);
+    }
+
+    /**
+     * Save the service setup form
+     */
     public function add($args, Request $request): void
     {
         $params = $request->getUserVars();
