@@ -14,7 +14,7 @@ msgid "plugins.generic.swordv3.service.authMode"
 msgstr "Authentication Method"
 
 msgid "plugins.generic.swordv3.service.authMode.unsupported"
-msgstr "The {$authMode} authentication method is not supported by this service."
+msgstr "The {$authMode} authentication method is not supported by this service. Supported modes: {$supportedModes}"
 
 msgid "plugins.generic.swordv3.service.authMode.userPassFailed"
 msgstr "The username or password are incorrect."
@@ -75,3 +75,27 @@ msgstr "Unknown"
 
 msgid "plugins.generic.swordv3.status.unknown.description"
 msgstr "Deposits in an unknown state."
+
+msgid "plugins.generic.swordv3.disabled"
+msgstr "Deposits to this service were disabled automatically when an error was encountered."
+
+msgid "plugins.generic.swordv3.disabled.help"
+msgstr "If you are unable to resolve the issue yourself, please contact the depositing service or your system administrator for help. Once resolved, you can clear this error by re-saving the form below."
+
+msgid "plugins.generic.swordv3.authError.missingCredentials"
+msgstr "No authenticiation credentials sent with deposit request. Please provide the following error message to your system administrator: {$error}"
+
+msgid "plugins.generic.swordv3.notification.authError.subject"
+msgstr "Unable to deposit publications from {$context} in {$service}"
+
+msgid "plugins.generic.swordv3.notification.authError.intro"
+msgstr "An authentication error occurred while trying to deposit metadata and files from <a href=\"{$contextUrl}\">{$context}</a> in the deposit service <a href=\"{$serviceUrl}\">{$service}</a>."
+
+msgid "plugins.generic.swordv3.notification.depositsStopped"
+msgstr "All deposits have been stopped and will not resume until the problem has been resolved. You may need to adjust the <a href=\"{$url}\">deposit settings</a>."
+
+msgid "plugins.generic.swordv3.notification.recipientsStatement"
+msgstr "You are receiving this email because you are a Journal Manager, Site Administrator, or Technical Support Contact for <a href=\"{$url}\">{$context}</a>."
+
+msgid "plugins.generic.swordv3.notification.automated"
+msgstr "This is an automated email sent by the {$plugin} plugin."

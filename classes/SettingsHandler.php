@@ -12,7 +12,6 @@ use APP\plugins\generic\swordv3\swordv3Client\exceptions\AuthenticationFailed;
 use APP\plugins\generic\swordv3\swordv3Client\exceptions\AuthenticationUnsupported;
 use APP\plugins\generic\swordv3\swordv3Client\exceptions\Swordv3ConnectException;
 use APP\plugins\generic\swordv3\swordv3Client\exceptions\Swordv3RequestException;
-use APP\plugins\generic\swordv3\swordv3Client\Service;
 use APP\plugins\generic\swordv3\swordv3Client\ServiceDocument;
 use APP\plugins\generic\swordv3\Swordv3Plugin;
 use Exception;
@@ -103,16 +102,18 @@ class SettingsHandler extends Handler
             'name' => $name,
             'url' => $url,
             'authMode' => $authMode,
+            'enabled' => true,
+            'statusMessage' => isset($service['statusMessage']) ? $service['statusMessage'] : '',
         ];
 
         // Encrypt a new password/api key if it has changed
         if ($authMode === 'Basic') {
             $data['username'] = $username;
-            $data['password'] = $service['password'] && $service['password'] === $password
+            $data['password'] = isset($service['password']) && $service['password'] === $password
                 ? $service['password']
                 : Crypt::encrypt($password);
         } else if ($authMode === 'APIKey') {
-            $data['apiKey'] = $service['apiKey'] && $service['apiKey'] === $apiKey
+            $data['apiKey'] = isset($service['apiKey']) && $service['apiKey'] === $apiKey
                 ? $service['apiKey']
                 : Crypt::encrypt($apiKey);
         }
@@ -180,7 +181,7 @@ class SettingsHandler extends Handler
         }
 
         // TODO: support more than one service
-        /** @var Service $service */
+        /** @var OJSService $service */
         $service = $services[0];
 
         $collector = new Collector($context->getId());
@@ -222,7 +223,7 @@ class SettingsHandler extends Handler
     /**
      * Request a ServiceDocument from a service
      */
-    protected function getServiceDocument(Service $service): ServiceDocument
+    protected function getServiceDocument(OJSService $service): ServiceDocument
     {
         $client = new Client(
             httpClient: Application::get()->getHttpClient(),

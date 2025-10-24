@@ -12,7 +12,7 @@ class DepositsNotAccepted extends Exception
         public ServiceDocument $serviceDocument,
     ) {
         parent::__construct(
-            "{$service->name} does not accept deposits."
+            "Deposit service at {$service->url} does not accept deposits."
         );
     }
 }

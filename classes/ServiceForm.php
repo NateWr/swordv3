@@ -2,6 +2,7 @@
 
 namespace APP\plugins\generic\swordv3\classes;
 
+use PKP\components\forms\FieldHTML;
 use PKP\components\forms\FieldOptions;
 use PKP\components\forms\FieldText;
 use PKP\components\forms\FormComponent;
@@ -17,6 +18,19 @@ class ServiceForm extends FormComponent
     {
         $this->action = $action;
         $this->locales = $locales;
+
+        if (isset($data) && !$data['enabled']) {
+            $error = isset($data['statusMessage']) ? $data['statusMessage'] : '';
+            $this->addField(new FieldHTML('disabled', [
+                'description' => join('', [
+                    '<div class="pkpNotification pkpNotification--warning">',
+                    '<p>' . __('plugins.generic.swordv3.disabled') . '</p>',
+                    '<p><strong>' . $error . '</strong></p>',
+                    '<p>' . __('plugins.generic.swordv3.disabled.help') . '</p>',
+                    '</div>',
+                ])
+            ]));
+        }
 
         $this->addField(new FieldText('name', [
             'label' => __('plugins.generic.swordv3.service.name'),

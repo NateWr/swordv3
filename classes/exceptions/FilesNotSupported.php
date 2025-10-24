@@ -1,7 +1,6 @@
 <?php
 
 namespace APP\plugins\generic\swordv3\classes\exceptions;
-use APP\plugins\generic\swordv3\swordv3Client\DepositObject;
 use APP\plugins\generic\swordv3\swordv3Client\Service;
 use APP\plugins\generic\swordv3\swordv3Client\StatusDocument;
 use Exception;
@@ -13,8 +12,8 @@ class FilesNotSupported extends Exception
         public Service $service,
     ) {
         parent::__construct(
-            "Unable to deposit fileset for {$statusDocument->getObjectId()} in service {$service->name}."
-            . " SWORDv3 service {$service->name} has returned a StatusDocument for this object that does not support file actions or is missing fileSet.@id."
+            "Unable to deposit fileset for {$statusDocument->getObjectId()} at {$service->url}."
+            . " The StatusDocument for this object that does not support file actions or is missing fileSet.@id."
         );
     }
 }

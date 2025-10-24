@@ -15,11 +15,6 @@ class Swordv3RequestException extends Exception
         public RequestException $requestException,
         public Client $client,
     ) {
-        parent::__construct($this->message());
-    }
-
-    public function message(): string
-    {
-        return $this->requestException->getMessage();
+        parent::__construct($this->requestException->getMessage());
     }
 }

@@ -7,7 +7,9 @@ use APP\journal\Journal;
 use APP\journal\JournalDAO;
 use APP\plugins\generic\swordv3\classes\exceptions\DepositsNotAccepted;
 use APP\plugins\generic\swordv3\classes\exceptions\FilesNotSupported;
+use APP\plugins\generic\swordv3\classes\exceptions\RecipientsNotFound;
 use APP\plugins\generic\swordv3\classes\OJSDepositObject;
+use APP\plugins\generic\swordv3\classes\OJSService;
 use APP\plugins\generic\swordv3\swordv3Client\Client;
 use APP\plugins\generic\swordv3\swordv3Client\exceptions\AuthenticationFailed;
 use APP\plugins\generic\swordv3\swordv3Client\exceptions\AuthenticationRequired;
@@ -15,15 +17,20 @@ use APP\plugins\generic\swordv3\swordv3Client\exceptions\AuthenticationUnsupport
 use APP\plugins\generic\swordv3\swordv3Client\exceptions\DigestFormatNotFound;
 use APP\plugins\generic\swordv3\swordv3Client\exceptions\Swordv3ConnectException;
 use APP\plugins\generic\swordv3\swordv3Client\exceptions\Swordv3RequestException;
-use APP\plugins\generic\swordv3\swordv3Client\Service;
-use APP\plugins\generic\swordv3\swordv3Client\ServiceDocument;
 use APP\plugins\generic\swordv3\swordv3Client\StatusDocument;
+use APP\plugins\generic\swordv3\Swordv3Plugin;
 use APP\publication\Publication;
 use APP\submission\Submission;
 use DateTime;
+use Illuminate\Mail\Mailable;
+use Illuminate\Support\Facades\Mail;
 use PKP\config\Config;
+use PKP\context\Context;
 use PKP\db\DAORegistry;
 use PKP\jobs\BaseJob;
+use PKP\plugins\PluginRegistry;
+use PKP\security\Role;
+use PKP\user\User;
 use Throwable;
 
 class Deposit extends BaseJob
@@ -32,14 +39,19 @@ class Deposit extends BaseJob
         protected int $publicationId,
         protected int $submissionId,
         protected int $contextId,
-        protected Service $service,
+        protected OJSService $service,
     ) {
         parent::__construct();
     }
 
     public function handle(): void
     {
-        $this->log("Preparing to deposit Publication {$this->publicationId}, Submission {$this->submissionId}, Context {$this->contextId}.");
+        $this->log("Preparing to deposit Publication {$this->publicationId}, Submission {$this->submissionId}, Context {$this->contextId} to {$this->service->name}.");
+
+        if (!$this->service->enabled) {
+            $this->log("Aborting deposit because service has been disabled.");
+            return;
+        }
 
         $depositObject = $this->getDepositObject();
         if (!$depositObject) {
@@ -102,9 +114,15 @@ class Deposit extends BaseJob
             $this->log("Deposit Complete");
 
         } catch (AuthenticationUnsupported|AuthenticationRequired|AuthenticationFailed $exception) {
+            $this->log("Authentication error encountered: {$exception->getMessage()}");
+            $error = $this->getAuthErrorMessage($exception);
+            $this->disableService($error);
+            $this->notifyAuthError($error, $depositObject);
+            return;
+        } catch (DepositsNotAccepted $exception) {
             // TODO: send email to admin
-            // TODO: disable all sending to this service for now.
-            $this->log("Authentication error encountered at {$exception->requestException->getRequest()->getUri()}\n  {$exception->getMessage()}");
+            // TODO: disable alll sending to this service for now.
+            $this->log("Deposit aborted: {$exception->getMessage()}");
             return;
         } catch (Swordv3RequestException $exception) {
             // TODO: send email to admin
@@ -189,7 +207,7 @@ class Deposit extends BaseJob
     {
         $filename = Config::getVar('files', 'files_dir') . '/swordv3.log';
         $time = (new DateTime())->format('Y-m-d h:i:s');
-        $deposit = "{$this->contextId}-{$this->submissionId}-{$this->publicationId}";
+        $deposit = "{$this->service->name} {$this->contextId}-{$this->submissionId}-{$this->publicationId}";
         try {
             file_put_contents(
                 $filename,
@@ -199,5 +217,179 @@ class Deposit extends BaseJob
         } catch (Throwable $e) {
             error_log($e->getMessage());
         }
+    }
+
+    /**
+     * Get a user-facing error message for an authentication error
+     */
+    protected function getAuthErrorMessage(AuthenticationUnsupported|AuthenticationRequired|AuthenticationFailed $exception): string
+    {
+        $error = $exception->getMessage();
+        switch (get_class($exception)) {
+            case AuthenticationRequired::class:
+                $error = __('plugins.generic.swordv3.authError.missingCredentials', [
+                    'error' => $exception->getMessage(),
+                ]);
+                break;
+            case AuthenticationFailed::class:
+                $error = $exception->client->service->authMode->getMode() === 'Basic'
+                    ? __('plugins.generic.swordv3.service.authMode.userPassFailed')
+                    : __('plugins.generic.swordv3.service.authMode.apiKeyFailed');
+                break;
+            case AuthenticationUnsupported::class:
+                $error = __('plugins.generic.swordv3.service.authMode.unsupported', [
+                    'authMode' => $exception->service->authMode->getMode(),
+                    'supportedModes' => join(__('common.commaListSeparator'), $exception->serviceDocument->getAuthModes()),
+                ]);
+        }
+
+        return $error;
+    }
+
+    /**
+     * Send a notification email when an authentication error is encountered
+     */
+    protected function notifyAuthError(string $error, OJSDepositObject $depositObject): void
+    {
+        $subject = __('plugins.generic.swordv3.notification.authError.subject', [
+            'context' => $depositObject->context->getLocalizedName(),
+            'service' => $this->service->name,
+        ]);
+
+        $body = collect([
+            __('plugins.generic.swordv3.notification.authError.intro', [
+                'context' => $depositObject->context->getLocalizedName(),
+                'contextUrl' => $this->getContextUrl($depositObject->context),
+                'service' => $this->service->name,
+                'serviceUrl' => $this->service->url,
+            ]),
+            "<strong>{$error}</strong>",
+            __('plugins.generic.swordv3.notification.depositsStopped', [
+                'url' => $this->getSettingsUrl($depositObject->context),
+            ]),
+            __('plugins.generic.swordv3.notification.recipientsStatement', [
+                'url' => $this->getContextUrl($depositObject->context),
+                'context' => $depositObject->context->getLocalizedName(),
+            ]),
+            __('plugins.generic.swordv3.notification.automated', [
+                'plugin' => __('plugins.generic.swordv3.name'),
+            ]),
+        ]);
+
+        try {
+            $this->notify(
+                $depositObject->context,
+                $subject,
+                "<p>{$body->join('</p><p>')}</p>"
+            );
+        } catch (RecipientsNotFound $exception) {
+            error_log($e->getMessage() . " Failed deposit error: " . $exception->getMessage());
+        }
+    }
+
+    /**
+     * Send a notification email to managers, admins, or the tech support
+     * contact when there is a problem with a deposit
+     */
+    protected function notify(Context $context, string $subject, string $body): void
+    {
+        $recipients = $this->getErrorEmailRecipients($context);
+
+        if (!$recipients) {
+            throw new RecipientsNotFound("Unable to send a notification email about a failed deposit from the swordv3 plugin. No valid recipients were found.");
+        }
+
+        $mailable = new Mailable();
+        $mailable->to($recipients);
+        $mailable->from($context->getData('contactEmail'), $context->getData('contactName'));
+        $mailable->subject($subject);
+        $mailable->html($body);
+
+        Mail::send($mailable);
+    }
+
+    /**
+     * @return string[]
+     */
+    protected function getErrorEmailRecipients(Context $context): array
+    {
+        $managers = Repo::user()
+            ->getCollector()
+            ->filterByContextIds([$this->contextId])
+            ->filterByRoleIds([Role::ROLE_ID_MANAGER])
+            ->getMany()
+            ->map(fn(User $user) => ['email' =>$user->getEmail(), 'name' => $user->getFullName()]);
+
+        if ($managers->count()) {
+            return $managers->all();
+        }
+
+        $supportContact = $context->getData('supportEmail');
+
+        if ($supportContact) {
+            return [$supportContact];
+        }
+
+        $admins = Repo::user()
+            ->getCollector()
+            ->filterByRoleIds([Role::ROLE_ID_SITE_ADMIN])
+            ->getMany()
+            ->map(fn(User $user) => ['email' =>$user->getEmail(), 'name' => $user->getFullName()]);
+
+        return $admins->all();
+    }
+
+    protected function getContextUrl(Context $context): string
+    {
+        $request = Application::get()->getRequest();
+        return $request
+            ->getDispatcher()
+            ->url(
+                $request,
+                Application::ROUTE_PAGE,
+                $context->getPath(),
+            );
+    }
+
+    protected function getSettingsUrl(Context $context): string
+    {
+        $request = Application::get()->getRequest();
+        return $request
+            ->getDispatcher()
+            ->url(
+                $request,
+                Application::ROUTE_PAGE,
+                $context->getPath(),
+                'management',
+                'settings',
+                ['distribution'],
+                null,
+                'swordv3'
+            );
+    }
+
+    protected function disableService(string $reason): void
+    {
+        /** @var Swordv3Plugin $plugin */
+        $plugin = PluginRegistry::getPlugin('generic', 'swordv3plugin');
+        $data = $plugin->getSetting($this->contextId, 'services');
+        if (!is_array($data) || !count($data)) {
+            $data = [];
+        }
+
+        $newData = collect($data)
+            ->map(function(array $service) use ($reason) {
+                if ($this->service->url === $service['url']) {
+                    $service['enabled'] = false;
+                    $service['statusMessage'] = $reason;
+                }
+                return $service;
+            });
+
+        $plugin->updateSetting(
+            $this->contextId,
+            'services',
+            $newData
+        );
     }
 }

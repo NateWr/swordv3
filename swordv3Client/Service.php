@@ -10,7 +10,6 @@ namespace APP\plugins\generic\swordv3\swordv3Client;
 class Service
 {
     public function __construct(
-        public string $name,
         public string $url,
         public AuthMode $authMode,
     ) {

@@ -5,11 +5,11 @@ namespace APP\plugins\generic\swordv3;
 use APP\core\Application;
 use APP\plugins\generic\swordv3\classes\Collector;
 use APP\plugins\generic\swordv3\classes\listeners\DepositPublication;
+use APP\plugins\generic\swordv3\classes\OJSService;
 use APP\plugins\generic\swordv3\classes\ServiceForm;
 use APP\plugins\generic\swordv3\classes\SettingsHandler;
 use APP\plugins\generic\swordv3\swordv3Client\auth\APIKey;
 use APP\plugins\generic\swordv3\swordv3Client\auth\Basic;
-use APP\plugins\generic\swordv3\swordv3Client\Service;
 use APP\plugins\generic\swordv3\swordv3Client\StatusDocument;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Event;
@@ -75,7 +75,7 @@ class Swordv3Plugin extends GenericPlugin
                     'settings',
                     ['distribution'],
                     null,
-                    'sword'
+                    'swordv3'
                 )),
                 __('plugins.generic.swordv3.name'),
                 null
@@ -191,7 +191,7 @@ class Swordv3Plugin extends GenericPlugin
     }
 
     /**
-     * @return Service[]
+     * @return OJSService[]
      */
     public function getServices(int $contextId): array
     {
@@ -208,14 +208,16 @@ class Swordv3Plugin extends GenericPlugin
         return $services;
     }
 
-    public function getServiceFromPluginSettings(array $service): Service
+    public function getServiceFromPluginSettings(array $service): OJSService
     {
-        return new Service(
+        return new OJSService(
             $service['name'],
             $service['url'],
             $service['authMode'] === 'APIKey'
                 ? new APIKey(Crypt::decrypt($service['apiKey']))
-                : new Basic($service['username'], Crypt::decrypt($service['password']))
+                : new Basic($service['username'], Crypt::decrypt($service['password'])),
+            $service['enabled'],
+            $service['statusMessage']
         );
     }
 }

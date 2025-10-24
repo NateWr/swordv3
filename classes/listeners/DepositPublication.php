@@ -3,7 +3,7 @@
 namespace APP\plugins\generic\swordv3\classes\listeners;
 
 use APP\plugins\generic\swordv3\classes\jobs\Deposit;
-use APP\plugins\generic\swordv3\swordv3Client\Service;
+use APP\plugins\generic\swordv3\classes\OJSService;
 use APP\plugins\generic\swordv3\Swordv3Plugin;
 use PKP\observers\events\PublicationPublished;
 use PKP\plugins\PluginRegistry;
@@ -20,7 +20,7 @@ class DepositPublication
         }
 
         // @TODO support more than one service
-        /** @var Service $service */
+        /** @var OJSService $service */
         $service = $services[0];
 
         dispatch(
