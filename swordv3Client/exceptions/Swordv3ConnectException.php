@@ -12,7 +12,7 @@ use GuzzleHttp\Exception\ConnectException;
 class Swordv3ConnectException extends Exception
 {
     public function __construct(
-        public ConnectException $connectException,
+        public ConnectException $exception,
         public Client $client,
     ) {
         parent::__construct($this->message());
@@ -20,6 +20,6 @@ class Swordv3ConnectException extends Exception
 
     public function message(): string
     {
-        return $this->connectException->getMessage();
+        return $this->exception->getMessage();
     }
 }

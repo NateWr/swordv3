@@ -84,10 +84,8 @@ class StatusDocument
     public function getFileSetUrl(): string
     {
         if (
-            isset($this->statusDocument->actions)
-                && $this->statusDocument->actions->appendFiles
-                && isset($this->statusDocument->fileSet)
-                && isset($this->statusDocument->fileSet->{'@id'})
+            $this?->statusDocument?->actions?->appendFiles
+            && isset($this?->statusDocument?->fileSet?->{'@id'})
         ) {
             return $this->statusDocument->fileSet->{'@id'};
         }

@@ -12,9 +12,9 @@ use GuzzleHttp\Exception\RequestException;
 class Swordv3RequestException extends Exception
 {
     public function __construct(
-        public RequestException $requestException,
+        public RequestException $exception,
         public Client $client,
     ) {
-        parent::__construct($this->requestException->getMessage());
+        parent::__construct($this->exception->getMessage());
     }
 }

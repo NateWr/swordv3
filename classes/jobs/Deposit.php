@@ -6,8 +6,6 @@ use APP\facades\Repo;
 use APP\journal\Journal;
 use APP\journal\JournalDAO;
 use APP\plugins\generic\swordv3\classes\exceptions\DepositsNotAccepted;
-use APP\plugins\generic\swordv3\classes\exceptions\FilesNotSupported;
-use APP\plugins\generic\swordv3\classes\exceptions\RecipientsNotFound;
 use APP\plugins\generic\swordv3\classes\OJSDepositObject;
 use APP\plugins\generic\swordv3\classes\OJSService;
 use APP\plugins\generic\swordv3\swordv3Client\Client;
@@ -104,10 +102,7 @@ class Deposit extends BaseJob
 
             $this->savePublicationStatus($depositObject->publication, $statusDocument);
 
-            if (count($depositObject->fileset)) {
-                if (!$statusDocument->getFileSetUrl()) {
-                    throw new FilesNotSupported($statusDocument, $this->service);
-                }
+            if (count($depositObject->fileset) && $statusDocument->getFileSetUrl()) {
                 foreach ($depositObject->fileset as $file) {
                     $response = $client->appendObjectFile($statusDocument->getObjectId(), $file, $serviceDocument);
                 }
@@ -125,33 +120,24 @@ class Deposit extends BaseJob
             $this->log("Authentication error encountered: {$exception->getMessage()}");
             $error = $this->getAuthErrorMessage($exception);
             $this->disableService($error);
-            $this->notify($error, $depositObject->context);
+            $this->notifyServiceDisabled($error, $depositObject->context);
             return;
         } catch (DepositsNotAccepted $exception) {
             $this->log("Deposit aborted: {$exception->getMessage()}");
             $error = __('plugins.generic.swordv3.service.depositsNotAccepted');
             $this->disableService($error);
-            $this->notify($error, $depositObject->context);
+            $this->notifyServiceDisabled($error, $depositObject->context);
             return;
         } catch (DigestFormatNotFound $exception) {
             $this->log("Deposit aborted: {$exception->getMessage()}");
             $error = __('plugins.generic.swordv3.service.digestNotAccepted');
             $this->disableService($error);
-            $this->notify($error, $depositObject->context);
+            $this->notifyServiceDisabled($error, $depositObject->context);
             return;
-        } catch (FilesNotSupported $exception) {
-            // TODO: send email to admin
-            // TODO: update status to reflect incomplete deposit
-            $this->log("Deposit aborted: {$exception->getMessage()}");
-            return;
-        } catch (Swordv3RequestException $exception) {
-            // TODO: send email to admin
-            $this->log("HTTP error encountered at {$exception->requestException->getRequest()->getUri()}\n  {$exception->getMessage()}");
-            return;
-        } catch (Swordv3ConnectException $exception) {
-            // TODO: send email to admin
-            // TODO: re-schedule job and track repeated failures?
-            $this->log("HTTP error encountered at {$exception->connectException->getRequest()->getUri()}\n  {$exception->getMessage()}");
+        } catch (Swordv3RequestException|Swordv3ConnectException $exception) {
+            $this->log("HTTP error encountered at {$exception->exception->getRequest()->getUri()}\n  {$exception->getMessage()}");
+            $this->disableService($exception->getMessage());
+            $this->notifyServiceDisabled($exception->getMessage(), $depositObject->context);
             return;
         } catch (Throwable $exception) {
             throw $exception;
@@ -260,22 +246,25 @@ class Deposit extends BaseJob
     }
 
     /**
-     * Send a notification email to managers, admins, or the tech support
-     * contact when there is a problem with a deposit
+     * Send an email notification when there is a problem that
+     * disables deposits for this service
+     *
+     * Emails managers, admins, or the tech support contact.
      */
-    protected function notify(string $error, Context $context): void
+    protected function notifyServiceDisabled(string $error, Context $context): void
     {
         $recipients = $this->getErrorEmailRecipients($context);
 
         if (!$recipients) {
-            throw new RecipientsNotFound("Unable to send a notification email about a failed deposit from the swordv3 plugin. No valid recipients were found.");
+            $this->log(__('plugins.generic.swordv3.notification.recipientsNotFound'));
+            return;
         }
 
         $subject = __('plugins.generic.swordv3.notification.depositError.subject', [
             'context' => $context->getLocalizedName(),
             'service' => $this->service->name,
         ]);
-        $body = $this->getCommonEmailBody($error, $context, $this->service);
+        $body = $this->getCommonEmailBody($error, $context);
 
         $mailable = new Mailable();
         $mailable->to($recipients);
@@ -292,14 +281,14 @@ class Deposit extends BaseJob
      *
      * @return string HTML-formatted message
      */
-    protected function getCommonEmailBody(string $error, Context $context, OJSService $service): string
+    protected function getCommonEmailBody(string $error, Context $context): string
     {
         $body = collect([
             __('plugins.generic.swordv3.notification.serviceStatus.intro', [
                 'context' => $context->getLocalizedName(),
                 'contextUrl' => $this->getContextUrl($context),
-                'service' => $service->name,
-                'serviceUrl' => $service->url,
+                'service' => $this->service->name,
+                'serviceUrl' => $this->service->url,
             ]),
             "<strong>{$error}</strong>",
             __('plugins.generic.swordv3.notification.depositsStopped', [
