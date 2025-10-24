@@ -28,7 +28,7 @@ class DepositPublication
                 $publishedEvent->submission->getCurrentPublication()->getId(),
                 $publishedEvent->submission->getId(),
                 $publishedEvent->context->getId(),
-                $service
+                $service->url
             )
         );
     }

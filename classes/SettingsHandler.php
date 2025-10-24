@@ -199,7 +199,7 @@ class SettingsHandler extends Handler
                         $row->publication_id,
                         $row->submission_id,
                         $context->getId(),
-                        $service
+                        $service->url
                     )
                 );
             });

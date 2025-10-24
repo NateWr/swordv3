@@ -35,21 +35,29 @@ use Throwable;
 
 class Deposit extends BaseJob
 {
+    protected OJSService $service;
+
     public function __construct(
         protected int $publicationId,
         protected int $submissionId,
         protected int $contextId,
-        protected OJSService $service,
+        protected string $serviceUrl,
     ) {
         parent::__construct();
     }
 
     public function handle(): void
     {
-        $this->log("Preparing to deposit Publication {$this->publicationId}, Submission {$this->submissionId}, Context {$this->contextId} to {$this->service->name}.");
+        $this->log("Preparing to deposit Publication {$this->publicationId}, Submission {$this->submissionId}, Context {$this->contextId} to {$this->serviceUrl}.");
+
+        $this->service = $this->getService($this->serviceUrl);
+
+        if (!$this->service) {
+            $this->log("Aborting deposit because deposit service settings can not be found.");
+        }
 
         if (!$this->service->enabled) {
-            $this->log("Aborting deposit because service has been disabled.");
+            $this->log("Aborting deposit because deposit service has been disabled.");
             return;
         }
 
@@ -207,7 +215,7 @@ class Deposit extends BaseJob
     {
         $filename = Config::getVar('files', 'files_dir') . '/swordv3.log';
         $time = (new DateTime())->format('Y-m-d h:i:s');
-        $deposit = "{$this->service->name} {$this->contextId}-{$this->submissionId}-{$this->publicationId}";
+        $deposit = "{$this->contextId}-{$this->submissionId}-{$this->publicationId}";
         try {
             file_put_contents(
                 $filename,
@@ -366,6 +374,19 @@ class Deposit extends BaseJob
                 null,
                 'swordv3'
             );
+    }
+
+    protected function getService(string $url): ?OJSService
+    {
+        /** @var Swordv3Plugin $plugin */
+        $plugin = PluginRegistry::getPlugin('generic', 'swordv3plugin');
+        $services = $plugin->getServices($this->contextId);
+        foreach ($services as $service) {
+            if ($service->url === $url) {
+                return $service;
+            }
+        }
+        return null;
     }
 
     protected function disableService(string $reason): void
