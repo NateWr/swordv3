@@ -80,19 +80,22 @@ msgid "plugins.generic.swordv3.disabled"
 msgstr "Deposits to this service were disabled automatically when an error was encountered."
 
 msgid "plugins.generic.swordv3.disabled.help"
-msgstr "If you are unable to resolve the issue yourself, please contact the depositing service or your system administrator for help. Once resolved, you can clear this error by re-saving the form below."
+msgstr "If you are unable to resolve the issue yourself, please contact the depositing service or your system administrator for help. Once resolved, you can resume automated deposits by re-saving the form below."
 
 msgid "plugins.generic.swordv3.authError.missingCredentials"
 msgstr "No authenticiation credentials sent with deposit request. Please provide the following error message to your system administrator: {$error}"
 
-msgid "plugins.generic.swordv3.notification.authError.subject"
+msgid "plugins.generic.swordv3.notification.depositError.subject"
 msgstr "Unable to deposit publications from {$context} in {$service}"
 
 msgid "plugins.generic.swordv3.notification.authError.intro"
 msgstr "An authentication error occurred while trying to deposit metadata and files from <a href=\"{$contextUrl}\">{$context}</a> in the deposit service <a href=\"{$serviceUrl}\">{$service}</a>."
 
+msgid "plugins.generic.swordv3.notification.serviceStatus.intro"
+msgstr "A problem was encountered while trying to deposit metadata and files from <a href=\"{$contextUrl}\">{$context}</a> in the deposit service <a href=\"{$serviceUrl}\">{$service}</a>."
+
 msgid "plugins.generic.swordv3.notification.depositsStopped"
-msgstr "All deposits have been stopped and will not resume until the problem has been resolved. You may need to adjust the <a href=\"{$url}\">deposit settings</a>."
+msgstr "All deposits have been stopped and will not resume until the problem has been resolved. You may need to adjust the <a href=\"{$url}\">service settings</a>."
 
 msgid "plugins.generic.swordv3.notification.recipientsStatement"
 msgstr "You are receiving this email because you are a Journal Manager, Site Administrator, or Technical Support Contact for <a href=\"{$url}\">{$context}</a>."
