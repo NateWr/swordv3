@@ -125,13 +125,24 @@ class Deposit extends BaseJob
             $this->log("Authentication error encountered: {$exception->getMessage()}");
             $error = $this->getAuthErrorMessage($exception);
             $this->disableService($error);
-            $this->notifyAuthError($error, $depositObject);
+            $this->notify($error, $depositObject->context);
             return;
         } catch (DepositsNotAccepted $exception) {
             $this->log("Deposit aborted: {$exception->getMessage()}");
             $error = __('plugins.generic.swordv3.service.depositsNotAccepted');
             $this->disableService($error);
-            $this->notifyServiceStatus($error, $depositObject);
+            $this->notify($error, $depositObject->context);
+            return;
+        } catch (DigestFormatNotFound $exception) {
+            $this->log("Deposit aborted: {$exception->getMessage()}");
+            $error = __('plugins.generic.swordv3.service.digestNotAccepted');
+            $this->disableService($error);
+            $this->notify($error, $depositObject->context);
+            return;
+        } catch (FilesNotSupported $exception) {
+            // TODO: send email to admin
+            // TODO: update status to reflect incomplete deposit
+            $this->log("Deposit aborted: {$exception->getMessage()}");
             return;
         } catch (Swordv3RequestException $exception) {
             // TODO: send email to admin
@@ -142,13 +153,6 @@ class Deposit extends BaseJob
             // TODO: re-schedule job and track repeated failures?
             $this->log("HTTP error encountered at {$exception->connectException->getRequest()->getUri()}\n  {$exception->getMessage()}");
             return;
-        } catch (DigestFormatNotFound $exception) {
-            // TODO: send email to admin
-            $this->log($exception->getMessage());
-        } catch (FilesNotSupported $exception) {
-            // TODO: send email to admin
-            // TODO: update status to reflect incomplete deposit
-            $this->log("Deposit aborted: {$exception->getMessage()}");
         } catch (Throwable $exception) {
             throw $exception;
         }
@@ -256,99 +260,22 @@ class Deposit extends BaseJob
     }
 
     /**
-     * Send a notification email when an authentication error is encountered
-     */
-    protected function notifyAuthError(string $error, OJSDepositObject $depositObject): void
-    {
-        $subject = __('plugins.generic.swordv3.notification.depositError.subject', [
-            'context' => $depositObject->context->getLocalizedName(),
-            'service' => $this->service->name,
-        ]);
-
-        $body = collect([
-            __('plugins.generic.swordv3.notification.authError.intro', [
-                'context' => $depositObject->context->getLocalizedName(),
-                'contextUrl' => $this->getContextUrl($depositObject->context),
-                'service' => $this->service->name,
-                'serviceUrl' => $this->service->url,
-            ]),
-            "<strong>{$error}</strong>",
-            __('plugins.generic.swordv3.notification.depositsStopped', [
-                'url' => $this->getSettingsUrl($depositObject->context),
-            ]),
-            __('plugins.generic.swordv3.notification.recipientsStatement', [
-                'url' => $this->getContextUrl($depositObject->context),
-                'context' => $depositObject->context->getLocalizedName(),
-            ]),
-            __('plugins.generic.swordv3.notification.automated', [
-                'plugin' => __('plugins.generic.swordv3.name'),
-            ]),
-        ]);
-
-        try {
-            $this->notify(
-                $depositObject->context,
-                $subject,
-                "<p>{$body->join('</p><p>')}</p>"
-            );
-        } catch (RecipientsNotFound $exception) {
-            error_log($e->getMessage() . " Failed deposit error: " . $exception->getMessage());
-        }
-    }
-
-    /**
-     * Send a notification email when the service does not support
-     * a necessary feature of some kind
-     */
-    protected function notifyServiceStatus(string $error, OJSDepositObject $depositObject): void
-    {
-        $subject = __('plugins.generic.swordv3.notification.depositError.subject', [
-            'context' => $depositObject->context->getLocalizedName(),
-            'service' => $this->service->name,
-        ]);
-
-        $body = collect([
-            __('plugins.generic.swordv3.notification.serviceStatus.intro', [
-                'context' => $depositObject->context->getLocalizedName(),
-                'contextUrl' => $this->getContextUrl($depositObject->context),
-                'service' => $this->service->name,
-                'serviceUrl' => $this->service->url,
-            ]),
-            "<strong>{$error}</strong>",
-            __('plugins.generic.swordv3.notification.depositsStopped', [
-                'url' => $this->getSettingsUrl($depositObject->context),
-            ]),
-            __('plugins.generic.swordv3.notification.recipientsStatement', [
-                'url' => $this->getContextUrl($depositObject->context),
-                'context' => $depositObject->context->getLocalizedName(),
-            ]),
-            __('plugins.generic.swordv3.notification.automated', [
-                'plugin' => __('plugins.generic.swordv3.name'),
-            ]),
-        ]);
-
-        try {
-            $this->notify(
-                $depositObject->context,
-                $subject,
-                "<p>{$body->join('</p><p>')}</p>"
-            );
-        } catch (RecipientsNotFound $exception) {
-            error_log($e->getMessage() . " Failed deposit error: " . $exception->getMessage());
-        }
-    }
-
-    /**
      * Send a notification email to managers, admins, or the tech support
      * contact when there is a problem with a deposit
      */
-    protected function notify(Context $context, string $subject, string $body): void
+    protected function notify(string $error, Context $context): void
     {
         $recipients = $this->getErrorEmailRecipients($context);
 
         if (!$recipients) {
             throw new RecipientsNotFound("Unable to send a notification email about a failed deposit from the swordv3 plugin. No valid recipients were found.");
         }
+
+        $subject = __('plugins.generic.swordv3.notification.depositError.subject', [
+            'context' => $context->getLocalizedName(),
+            'service' => $this->service->name,
+        ]);
+        $body = $this->getCommonEmailBody($error, $context, $this->service);
 
         $mailable = new Mailable();
         $mailable->to($recipients);
@@ -360,6 +287,40 @@ class Deposit extends BaseJob
     }
 
     /**
+     * Get the email notification message that is most commonly
+     * used with depositing errors
+     *
+     * @return string HTML-formatted message
+     */
+    protected function getCommonEmailBody(string $error, Context $context, OJSService $service): string
+    {
+        $body = collect([
+            __('plugins.generic.swordv3.notification.serviceStatus.intro', [
+                'context' => $context->getLocalizedName(),
+                'contextUrl' => $this->getContextUrl($context),
+                'service' => $service->name,
+                'serviceUrl' => $service->url,
+            ]),
+            "<strong>{$error}</strong>",
+            __('plugins.generic.swordv3.notification.depositsStopped', [
+                'url' => $this->getSettingsUrl($context),
+            ]),
+            __('plugins.generic.swordv3.notification.recipientsStatement', [
+                'url' => $this->getContextUrl($context),
+                'context' => $context->getLocalizedName(),
+            ]),
+            __('plugins.generic.swordv3.notification.automated', [
+                'plugin' => __('plugins.generic.swordv3.name'),
+            ]),
+        ]);
+
+        return "<p>{$body->join('</p><p>')}</p>";
+    }
+
+    /**
+     * Get the email and name of recipients who should be notified of
+     * errors encountered while depositing
+     *
      * @return string[]
      */
     protected function getErrorEmailRecipients(Context $context): array

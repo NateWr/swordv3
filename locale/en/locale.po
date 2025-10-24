@@ -46,6 +46,9 @@ msgstr "Can't connect to the service. Please check the details and try again. If
 msgid "plugins.generic.swordv3.service.depositsNotAccepted"
 msgstr "Connected successfully to the service, but it does not accept deposits. Please contact the service provider for more information."
 
+msgid "plugins.generic.swordv3.service.digestNotAccepted"
+msgstr "No compatible digest format could be found to validate file integrity with this deposit service."
+
 msgid "plugins.generic.swordv3.status.pending"
 msgstr "Pending"
 
@@ -86,7 +89,7 @@ msgid "plugins.generic.swordv3.authError.missingCredentials"
 msgstr "No authenticiation credentials sent with deposit request. Please provide the following error message to your system administrator: {$error}"
 
 msgid "plugins.generic.swordv3.notification.depositError.subject"
-msgstr "Unable to deposit publications from {$context} in {$service}"
+msgstr "Error depositing publications from {$context} in {$service}"
 
 msgid "plugins.generic.swordv3.notification.authError.intro"
 msgstr "An authentication error occurred while trying to deposit metadata and files from <a href=\"{$contextUrl}\">{$context}</a> in the deposit service <a href=\"{$serviceUrl}\">{$service}</a>."
