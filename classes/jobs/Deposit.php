@@ -27,7 +27,6 @@ use Illuminate\Support\Facades\Mail;
 use PKP\config\Config;
 use PKP\context\Context;
 use PKP\db\DAORegistry;
-use PKP\galley\Galley;
 use PKP\jobs\BaseJob;
 use PKP\plugins\PluginRegistry;
 use PKP\security\Role;
@@ -101,17 +100,23 @@ class Deposit extends BaseJob
             }
 
             $statusDocument = new StatusDocument($response->getBody());
-            $this->savePublicationStatus($depositObject, $statusDocument);
-            $this->validateDepositStatus($statusDocument);
+            $depositObject->publication = $this->savePublicationStatus($depositObject->publication, $statusDocument);
+
+            if ($statusDocument->getSwordStateId() === StatusDocument::STATE_REJECTED) {
+                throw new DepositRejectedStatus($statusDocument, $this->service);
+            }
+
+            if ($statusDocument->getSwordStateId() === StatusDocument::STATE_DELETED) {
+                throw new DepositDeletedStatus($statusDocument, $this->service);
+            }
 
             if (count($depositObject->galleyFilepaths)) {
                 if ($statusDocument->canAppendFiles()) {
                     foreach ($depositObject->galleyFilepaths as $galleyId => $file) {
                         $this->log("Depositing {$file} to {$statusDocument->getObjectId()}.");
                         $response = $client->appendObjectFile($statusDocument->getObjectId(), $file, $serviceDocument);
-                        $fileStatusDocument = new StatusDocument($response->getBody());
-                        $this->saveGalleyStatus($galleyId, $depositObject, $fileStatusDocument);
-                        $this->validateDepositStatus($fileStatusDocument);
+                        $statusDocument = new StatusDocument($response->getBody());
+                        $depositObject->publication = $this->savePublicationStatus($depositObject->publication, $statusDocument);
                     }
                 } else {
                     $this->log("Skipping file deposits because the service has indicated that it does not support file deposits for this object.");
@@ -119,7 +124,7 @@ class Deposit extends BaseJob
             }
 
             $statusDocument = new StatusDocument($client->getStatusDocument($statusDocument->getObjectId())->getBody());
-            $this->savePublicationStatus($depositObject, $statusDocument);
+            $depositObject->publication = $this->savePublicationStatus($depositObject->publication, $statusDocument);
 
             foreach ($statusDocument->getLinks() as $link) {
                 $this->log("Linked resource created at {$link->{'@id'}}.");
@@ -195,47 +200,22 @@ class Deposit extends BaseJob
     /**
      * Store the StatusDocument and other metadata related to the deposit
      * action in the Publication settings
+     *
+     * @return Publication A fresh copy of the publication with the new status data
      */
-    protected function savePublicationStatus(OJSDepositObject $depositObject, StatusDocument $statusDocument): void
+    protected function savePublicationStatus(Publication $publication, StatusDocument $statusDocument): Publication
     {
         $newPublication = Repo::publication()->newDataObject(
             array_merge(
-                $depositObject->publication->_data, [
+                $publication->_data, [
                     'swordv3DateDeposited' => (new DateTime()->format('Y-m-d h:i:s')),
                     'swordv3State' => $statusDocument->getSwordStateId(),
                     'swordv3StatusDocument' => json_encode($statusDocument->getStatusDocument()),
                 ]
             )
         );
-        Repo::publication()->dao->update($newPublication, $depositObject->publication);
-        $depositObject->publication = Repo::publication()->get($newPublication->getId());
-    }
-
-    /**
-     * Store the StatusDocument related to a file deposit
-     * in the galley settings
-     */
-    protected function saveGalleyStatus(int $galleyId, OJSDepositObject $depositObject, StatusDocument $statusDocument): void
-    {
-        $galley = $depositObject->galleys->first(fn(Galley $g) => $g->getId() === $galleyId);
-        if (!$galley) {
-            return;
-        }
-        $newGalley = Repo::galley()->newDataObject(
-            array_merge(
-                $galley->_data,
-                [
-                    'swordv3DateDeposited' => (new DateTime()->format('Y-m-d h:i:s')),
-                    'swordv3State' => $statusDocument->getSwordStateId(),
-                    'swordv3StatusDocument' => json_encode($statusDocument->getStatusDocument()),
-                ]
-            )
-        );
-        Repo::galley()->dao->update($newGalley, $galley);
-        $newGalley = Repo::galley()->get($newGalley->getId());
-        if ($newGalley) {
-            $depositObject->setGalley($newGalley);
-        }
+        Repo::publication()->dao->update($newPublication, $publication);
+        return Repo::publication()->get($newPublication->getId());
     }
 
     /**
@@ -444,20 +424,5 @@ class Deposit extends BaseJob
             'services',
             $newData
         );
-    }
-
-    /**
-     * @throws DepositRejectedStatus
-     * @throws DepositDeletedStatus
-     */
-    protected function validateDepositStatus(StatusDocument $statusDocument):void
-    {
-        if ($statusDocument->getSwordStateId() === StatusDocument::STATE_REJECTED) {
-            throw new DepositRejectedStatus($statusDocument, $this->service);
-        }
-
-        if ($statusDocument->getSwordStateId() === StatusDocument::STATE_DELETED) {
-            throw new DepositDeletedStatus($statusDocument, $this->service);
-        }
     }
 }

@@ -32,8 +32,7 @@ class Swordv3Plugin extends GenericPlugin
             Hook::add('TemplateManager::display', $this->getSettingsForm(...));
             Hook::add('Template::Settings::distribution', $this->addSettingsPage(...));
             Hook::add('LoadHandler', $this->setSettingsHandler(...));
-            Hook::add('Schema::get::publication', $this->addToEntitySchemas(...));
-            Hook::add('Schema::get::galley', $this->addToEntitySchemas(...));
+            Hook::add('Schema::get::publication', $this->addToPublicationSchema(...));
             Event::listen(
                 PublicationPublished::class,
                 DepositPublication::class,
@@ -170,11 +169,10 @@ class Swordv3Plugin extends GenericPlugin
     }
 
     /**
-     * Extend entity schemas for publications and galleys
-     *
-     * Adds entity properties for storing deposit information
+     * Extend Publication entity schema to create properties for
+     * storing deposit status information
      */
-    public function addToEntitySchemas(string $hookName, array $args): bool
+    public function addToPublicationSchema(string $hookName, array $args): bool
     {
         $schema = $args[0];
         $schema->properties->swordv3DateDeposited = (object) [
