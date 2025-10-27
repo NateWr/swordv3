@@ -8,23 +8,26 @@ use APP\journal\JournalDAO;
 use APP\plugins\generic\swordv3\classes\exceptions\DepositsNotAccepted;
 use APP\plugins\generic\swordv3\classes\OJSDepositObject;
 use APP\plugins\generic\swordv3\classes\OJSService;
+use APP\plugins\generic\swordv3\exceptions\DepositDeletedStatus;
+use APP\plugins\generic\swordv3\exceptions\DepositRejectedStatus;
 use APP\plugins\generic\swordv3\swordv3Client\Client;
 use APP\plugins\generic\swordv3\swordv3Client\exceptions\AuthenticationFailed;
 use APP\plugins\generic\swordv3\swordv3Client\exceptions\AuthenticationRequired;
 use APP\plugins\generic\swordv3\swordv3Client\exceptions\AuthenticationUnsupported;
 use APP\plugins\generic\swordv3\swordv3Client\exceptions\DigestFormatNotFound;
-use APP\plugins\generic\swordv3\swordv3Client\exceptions\Swordv3ConnectException;
-use APP\plugins\generic\swordv3\swordv3Client\exceptions\Swordv3RequestException;
 use APP\plugins\generic\swordv3\swordv3Client\StatusDocument;
 use APP\plugins\generic\swordv3\Swordv3Plugin;
 use APP\publication\Publication;
 use APP\submission\Submission;
 use DateTime;
+use GuzzleHttp\Exception\ConnectException;
+use GuzzleHttp\Exception\RequestException;
 use Illuminate\Mail\Mailable;
 use Illuminate\Support\Facades\Mail;
 use PKP\config\Config;
 use PKP\context\Context;
 use PKP\db\DAORegistry;
+use PKP\galley\Galley;
 use PKP\jobs\BaseJob;
 use PKP\plugins\PluginRegistry;
 use PKP\security\Role;
@@ -61,7 +64,7 @@ class Deposit extends BaseJob
 
         $depositObject = $this->getDepositObject();
         if (!$depositObject) {
-            $this->log("Aborting deposit because no valid deposit object could be created. This could be because the publication has been deleted, is not published, or because publication was not found in the expected submission or context.");
+            $this->log("Aborting deposit because no valid deposit object could be created. This could be because the publication has been deleted, is not published, or because the publication was not found in the expected submission or context.");
             return;
         }
 
@@ -82,34 +85,41 @@ class Deposit extends BaseJob
                 throw new DepositsNotAccepted($this->service, $serviceDocument);
             }
 
-            $response = $depositObject->statusDocument
-                ? $client->replaceObjectWithMetadata(
+            if ($depositObject?->statusDocument) {
+                $this->log("Replacing existing deposit object at {$depositObject->statusDocument->getObjectId()}.");
+                $response = $client->replaceObjectWithMetadata(
                     $depositObject->statusDocument->getObjectId(),
                     $depositObject->metadata,
                     $serviceDocument
-                )
-                : $client->createObjectWithMetadata(
+                );
+            } else {
+                $this->log("Creating new deposit object.");
+                $response = $client->createObjectWithMetadata(
                     $depositObject->metadata,
                     $serviceDocument
                 );
+            }
 
             $statusDocument = new StatusDocument($response->getBody());
+            $this->savePublicationStatus($depositObject, $statusDocument);
+            $this->validateDepositStatus($statusDocument);
 
-            $actionLanguage = $depositObject->statusDocument
-                ? 'Replaced deposit object and metadata'
-                : 'Created deposit object with metadata';
-            $this->log("{$actionLanguage} for publication {$this->publicationId} at {$statusDocument->getObjectId()}.");
-
-            $this->savePublicationStatus($depositObject->publication, $statusDocument);
-
-            if (count($depositObject->fileset) && $statusDocument->getFileSetUrl()) {
-                foreach ($depositObject->fileset as $file) {
-                    $response = $client->appendObjectFile($statusDocument->getObjectId(), $file, $serviceDocument);
+            if (count($depositObject->galleyFilepaths)) {
+                if ($statusDocument->canAppendFiles()) {
+                    foreach ($depositObject->galleyFilepaths as $galleyId => $file) {
+                        $this->log("Depositing {$file} to {$statusDocument->getObjectId()}.");
+                        $response = $client->appendObjectFile($statusDocument->getObjectId(), $file, $serviceDocument);
+                        $fileStatusDocument = new StatusDocument($response->getBody());
+                        $this->saveGalleyStatus($galleyId, $depositObject, $fileStatusDocument);
+                        $this->validateDepositStatus($fileStatusDocument);
+                    }
+                } else {
+                    $this->log("Skipping file deposits because the service has indicated that it does not support file deposits for this object.");
                 }
             }
 
             $statusDocument = new StatusDocument($client->getStatusDocument($statusDocument->getObjectId())->getBody());
-            $this->savePublicationStatus($depositObject->publication, $statusDocument);
+            $this->savePublicationStatus($depositObject, $statusDocument);
 
             foreach ($statusDocument->getLinks() as $link) {
                 $this->log("Linked resource created at {$link->{'@id'}}.");
@@ -134,8 +144,11 @@ class Deposit extends BaseJob
             $this->disableService($error);
             $this->notifyServiceDisabled($error, $depositObject->context);
             return;
-        } catch (Swordv3RequestException|Swordv3ConnectException $exception) {
-            $this->log("HTTP error encountered at {$exception->exception->getRequest()->getUri()}\n  {$exception->getMessage()}");
+        } catch (DepositRejectedStatus|DepositDeletedStatus $exception) {
+            $this->log("Deposit aborted: {$exception->getMessage()}");
+            return;
+        } catch (RequestException|ConnectException $exception) {
+            $this->log("HTTP error encountered at {$exception->getRequest()->getUri()}\n  {$exception->getMessage()}");
             $this->disableService($exception->getMessage());
             $this->notifyServiceDisabled($exception->getMessage(), $depositObject->context);
             return;
@@ -183,20 +196,46 @@ class Deposit extends BaseJob
      * Store the StatusDocument and other metadata related to the deposit
      * action in the Publication settings
      */
-    protected function savePublicationStatus(Publication $publication, StatusDocument $statusDocument): void
+    protected function savePublicationStatus(OJSDepositObject $depositObject, StatusDocument $statusDocument): void
     {
         $newPublication = Repo::publication()->newDataObject(
             array_merge(
-                $publication->_data, [
+                $depositObject->publication->_data, [
                     'swordv3DateDeposited' => (new DateTime()->format('Y-m-d h:i:s')),
                     'swordv3State' => $statusDocument->getSwordStateId(),
                     'swordv3StatusDocument' => json_encode($statusDocument->getStatusDocument()),
                 ]
             )
         );
-        Repo::publication()->dao->update($newPublication, $publication);
-        $newPublication = Repo::publication()->get($newPublication->getId());
+        Repo::publication()->dao->update($newPublication, $depositObject->publication);
+        $depositObject->publication = Repo::publication()->get($newPublication->getId());
+    }
 
+    /**
+     * Store the StatusDocument related to a file deposit
+     * in the galley settings
+     */
+    protected function saveGalleyStatus(int $galleyId, OJSDepositObject $depositObject, StatusDocument $statusDocument): void
+    {
+        $galley = $depositObject->galleys->first(fn(Galley $g) => $g->getId() === $galleyId);
+        if (!$galley) {
+            return;
+        }
+        $newGalley = Repo::galley()->newDataObject(
+            array_merge(
+                $galley->_data,
+                [
+                    'swordv3DateDeposited' => (new DateTime()->format('Y-m-d h:i:s')),
+                    'swordv3State' => $statusDocument->getSwordStateId(),
+                    'swordv3StatusDocument' => json_encode($statusDocument->getStatusDocument()),
+                ]
+            )
+        );
+        Repo::galley()->dao->update($newGalley, $galley);
+        $newGalley = Repo::galley()->get($newGalley->getId());
+        if ($newGalley) {
+            $depositObject->setGalley($newGalley);
+        }
     }
 
     /**
@@ -231,7 +270,7 @@ class Deposit extends BaseJob
                 ]);
                 break;
             case AuthenticationFailed::class:
-                $error = $exception->client->service->authMode->getMode() === 'Basic'
+                $error = $this->service->authMode->getMode() === 'Basic'
                     ? __('plugins.generic.swordv3.service.authMode.userPassFailed')
                     : __('plugins.generic.swordv3.service.authMode.apiKeyFailed');
                 break;
@@ -405,5 +444,20 @@ class Deposit extends BaseJob
             'services',
             $newData
         );
+    }
+
+    /**
+     * @throws DepositRejectedStatus
+     * @throws DepositDeletedStatus
+     */
+    protected function validateDepositStatus(StatusDocument $statusDocument):void
+    {
+        if ($statusDocument->getSwordStateId() === StatusDocument::STATE_REJECTED) {
+            throw new DepositRejectedStatus($statusDocument, $this->service);
+        }
+
+        if ($statusDocument->getSwordStateId() === StatusDocument::STATE_DELETED) {
+            throw new DepositDeletedStatus($statusDocument, $this->service);
+        }
     }
 }

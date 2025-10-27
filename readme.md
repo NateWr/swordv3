@@ -9,10 +9,10 @@ An OJS plugin to deposit article metadata and PDF galleys with a SWORDv3 service
 - [x] Deposit PDF galleys
 - [x] Automatic deposit of articles as soon as they are published
 - [x] Manually deposit all previously published articles
+- [x] Notify admin or journal manager when deposits fail
 - [ ] Deposit to more than one service
 - [ ] Deposit individual articles manually
 - [ ] Deposit metadata in OpenAIRE/DataCite format
-- [ ] Notify admin or journal manager when deposits fail
 - [ ] UI to view each article's deposit URL, status document and error message
 - [ ] Deposit ePub, Zip, and HTML galleys
 - [ ] Deposit articles before publication
@@ -69,6 +69,6 @@ All deposits are handled by OJS's [jobs queue](https://docs.pkp.sfu.ca/dev/docum
 
 - Regular application errors can be found in the server's error log.
 - The plugin creates a log of deposits at `<files_dir>/swordv3.log`.
-- The [Status Document](https://swordapp.github.io/swordv3/swordv3.html#9.6) for each publication is saved in the `publication_settings` table under the `setting_name` of `swordv3StatusDocument`.
+- The [Status Document](https://swordapp.github.io/swordv3/swordv3.html#9.6) for deposits is saved under the `setting_name` of `swordv3StatusDocument` for each deposited object (`Publication` and `Galley`).
 - The plugin treats every `Publication` as a unique object. It has not yet been determined how a SWORDv3 server will link multiple versions of an article together.
 - The Reset button can be used to clear all existing Swordv3 deposit data from `Publication` settings. It will not reset the service connection details.

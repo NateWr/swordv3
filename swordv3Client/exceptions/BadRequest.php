@@ -2,7 +2,9 @@
 
 namespace APP\plugins\generic\swordv3\swordv3Client\exceptions;
 
-class BadRequest extends Swordv3RequestException
+use GuzzleHttp\Exception\RequestException;
+
+class BadRequest extends RequestException
 {
     //
 }

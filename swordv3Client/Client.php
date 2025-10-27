@@ -7,10 +7,7 @@ use APP\plugins\generic\swordv3\swordv3Client\exceptions\AuthenticationRequired;
 use APP\plugins\generic\swordv3\swordv3Client\exceptions\BadRequest;
 use APP\plugins\generic\swordv3\swordv3Client\exceptions\DigestFormatNotFound;
 use APP\plugins\generic\swordv3\swordv3Client\exceptions\PageNotFound;
-use APP\plugins\generic\swordv3\swordv3Client\exceptions\Swordv3ConnectException;
-use APP\plugins\generic\swordv3\swordv3Client\exceptions\Swordv3RequestException;
 use GuzzleHttp\Client as GuzzleHttpClient;
-use GuzzleHttp\Exception\ConnectException;
 use GuzzleHttp\Exception\RequestException;
 use GuzzleHttp\Psr7\Request;
 use Psr\Http\Message\ResponseInterface;
@@ -139,8 +136,6 @@ class Client
         } catch (RequestException $exception) {
             $exceptionClass = $this->getRequestException($exception);
             throw new $exceptionClass($exception, $this);
-        } catch (ConnectException $exception) {
-            throw new Swordv3ConnectException($exception, $this);
         }
         return $response;
     }
@@ -161,7 +156,7 @@ class Client
             case 401: return AuthenticationRequired::class;
             case 403: return AuthenticationFailed::class;
             case 404: return PageNotFound::class;
-            default: return Swordv3RequestException::class;
+            default: return RequestException::class;
         }
     }
 

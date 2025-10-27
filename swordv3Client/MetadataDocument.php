@@ -11,7 +11,6 @@
 namespace APP\plugins\generic\swordv3\swordv3Client;
 
 use APP\plugins\generic\swordv3\swordv3Client\exceptions\DigestFormatNotFound;
-use PKP\config\Config;
 
 class MetadataDocument
 {

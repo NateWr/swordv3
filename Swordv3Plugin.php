@@ -32,7 +32,8 @@ class Swordv3Plugin extends GenericPlugin
             Hook::add('TemplateManager::display', $this->getSettingsForm(...));
             Hook::add('Template::Settings::distribution', $this->addSettingsPage(...));
             Hook::add('LoadHandler', $this->setSettingsHandler(...));
-            Hook::add('Schema::get::publication', $this->addToPublicationSchema(...));
+            Hook::add('Schema::get::publication', $this->addToEntitySchemas(...));
+            Hook::add('Schema::get::galley', $this->addToEntitySchemas(...));
             Event::listen(
                 PublicationPublished::class,
                 DepositPublication::class,
@@ -140,7 +141,7 @@ class Swordv3Plugin extends GenericPlugin
             $deposited = $allStatuses->filter(fn($p) => in_array($p->setting_value, StatusDocument::SUCCESS_STATES))->count();
             $rejected = $allStatuses->filter(fn($p) => in_array($p->setting_value, [StatusDocument::STATE_REJECTED]))->count();
             $deleted = $allStatuses->filter(fn($p) => in_array($p->setting_value, [StatusDocument::STATE_DELETED]))->count();
-            $unknown = $allStatuses->filter(fn($p) => in_array($p->setting_value, StatusDocument::STATES))->count();
+            $unknown = $allStatuses->filter(fn($p) => !in_array($p->setting_value, StatusDocument::STATES))->count();
 
             $templateMgr->assign([
                 'swordv3Configured' => true,
@@ -168,7 +169,12 @@ class Swordv3Plugin extends GenericPlugin
         return false;
     }
 
-    public function addToPublicationSchema(string $hookName, array $args): bool
+    /**
+     * Extend entity schemas for publications and galleys
+     *
+     * Adds entity properties for storing deposit information
+     */
+    public function addToEntitySchemas(string $hookName, array $args): bool
     {
         $schema = $args[0];
         $schema->properties->swordv3DateDeposited = (object) [

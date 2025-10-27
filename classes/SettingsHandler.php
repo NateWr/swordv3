@@ -10,11 +10,11 @@ use APP\plugins\generic\swordv3\classes\jobs\Deposit;
 use APP\plugins\generic\swordv3\swordv3Client\Client;
 use APP\plugins\generic\swordv3\swordv3Client\exceptions\AuthenticationFailed;
 use APP\plugins\generic\swordv3\swordv3Client\exceptions\AuthenticationUnsupported;
-use APP\plugins\generic\swordv3\swordv3Client\exceptions\Swordv3ConnectException;
-use APP\plugins\generic\swordv3\swordv3Client\exceptions\Swordv3RequestException;
 use APP\plugins\generic\swordv3\swordv3Client\ServiceDocument;
 use APP\plugins\generic\swordv3\Swordv3Plugin;
 use Exception;
+use GuzzleHttp\Exception\ConnectException;
+use GuzzleHttp\Exception\RequestException;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
@@ -142,7 +142,7 @@ class SettingsHandler extends Handler
             } else {
                 $errors['apiKey'] = [__('plugins.generic.swordv3.service.authMode.apiKeyFailed')];
             }
-        } catch (Swordv3RequestException|Swordv3ConnectException $exception) {
+        } catch (RequestException|ConnectException $exception) {
             $errors['url'] = [__('plugins.generic.swordv3.service.setupFailed')];
         } catch (DepositsNotAccepted $exception) {
             $errors['url'] = [__('plugins.generic.swordv3.service.depositsNotAccepted')];
@@ -215,6 +215,9 @@ class SettingsHandler extends Handler
     public function reset($args, Request $request): void
     {
         DB::table('publication_settings')
+            ->whereLike('setting_name', '%swordv3%')
+            ->delete();
+        DB::table('publication_galley_settings')
             ->whereLike('setting_name', '%swordv3%')
             ->delete();
         $request->redirect(null, 'management', 'settings', ['distribution'], null, 'swordv3');

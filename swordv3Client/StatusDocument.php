@@ -81,19 +81,13 @@ class StatusDocument
         return '';
     }
 
-    public function getFileSetUrl(): string
-    {
-        if (
-            $this?->statusDocument?->actions?->appendFiles
-            && isset($this?->statusDocument?->fileSet?->{'@id'})
-        ) {
-            return $this->statusDocument->fileSet->{'@id'};
-        }
-        return '';
-    }
-
     public function getLinks(): array
     {
         return $this->statusDocument?->links ?? [];
+    }
+
+    public function canAppendFiles(): bool
+    {
+        return (bool) $this?->statusDocument?->actions?->appendFiles;
     }
 }

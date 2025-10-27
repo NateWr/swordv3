@@ -25,10 +25,22 @@ use PKP\galley\Galley;
  */
 class OJSDepositObject extends DepositObject
 {
+    /**
+     * A key map of galley IDs with the full path
+     * to the file to be deposited
+     *
+     * Excludes any galleys in unsupported file formats
+     *
+     * Example:
+     *
+     * [1 => '/full/path/to/galley.pdf']
+     */
+    public array $galleyFilepaths;
+
     public function __construct(
         public Publication $publication,
         /** LazyCollection<int,Galley> */
-        LazyCollection $galleys,
+        public LazyCollection $galleys,
         public Submission $submission,
         public Journal $context,
     ) {
@@ -36,17 +48,34 @@ class OJSDepositObject extends DepositObject
         if ($publication->getData('swordv3')) {
             $statusDocument = new StatusDocument($publication->getData('swordv3'));
         }
+        $this->galleyFilepaths = $this->getGalleyFilepaths($galleys);
         parent::__construct(
             metadata: $this->createDCMetadataDocument($publication, $submission, $context),
-            fileset:  $this->getFileset($galleys)->all(),
+            fileset:  array_values($this->galleyFilepaths),
             statusDocument: $statusDocument,
         );
     }
 
     /**
-     * Get a file path for each Galley in the supported format
+     * Update one of the galleys in the deposit object's
+     * collection of galleys
      */
-    protected function getFileset(LazyCollection $galleys): LazyCollection
+    public function setGalley(?Galley $galley): void
+    {
+        $this->galleys = $this->galleys->map(
+            function(Galley $g) use ($galley) {
+                return $g->getId() === $galley->getId()
+                    ? $galley
+                    : $g;
+            }
+        );
+    }
+
+    /**
+     * Get a file path for each Galley in the supported format
+     * and return an assoc array with the galley and the filepath
+     */
+    protected function getGalleyFilepaths(LazyCollection $galleys): array
     {
         return $galleys->map(function(Galley $galley) {
             $submissionFile = Repo::submissionFile()->get($galley->getData('submissionFileId'));
@@ -57,9 +86,14 @@ class OJSDepositObject extends DepositObject
             if (!$file || !in_array($file->mimetype, $this->getSupportedFileFormats())) {
                 return;
             }
-            return Config::getVar('files', 'files_dir') . '/' . $file->path;
+            return [
+                'galley' => $galley,
+                'filepath' => Config::getVar('files', 'files_dir') . '/' . $file->path
+            ];
         })
-        ->whereNotNull();
+        ->whereNotNull()
+        ->mapWithKeys(fn(array $g) => [$g['galley']->getId() => $g['filepath']])
+        ->all();
     }
 
     /**
