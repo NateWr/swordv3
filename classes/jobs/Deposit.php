@@ -110,9 +110,9 @@ class Deposit extends BaseJob
                 throw new DepositDeletedStatus($statusDocument, $this->service);
             }
 
-            if (count($depositObject->galleyFilepaths)) {
+            if (count($depositObject->fileset)) {
                 if ($statusDocument->canAppendFiles()) {
-                    foreach ($depositObject->galleyFilepaths as $galleyId => $file) {
+                    foreach ($depositObject->fileset as $file) {
                         $this->log("Depositing {$file} to {$statusDocument->getObjectId()}.");
                         $response = $client->appendObjectFile($statusDocument->getObjectId(), $file, $serviceDocument);
                         $statusDocument = new StatusDocument($response->getBody());

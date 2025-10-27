@@ -25,18 +25,6 @@ use PKP\galley\Galley;
  */
 class OJSDepositObject extends DepositObject
 {
-    /**
-     * A key map of galley IDs with the full path
-     * to the file to be deposited
-     *
-     * Excludes any galleys in unsupported file formats
-     *
-     * Example:
-     *
-     * [1 => '/full/path/to/galley.pdf']
-     */
-    public array $galleyFilepaths;
-
     public function __construct(
         public Publication $publication,
         /** LazyCollection<int,Galley> */
@@ -48,10 +36,9 @@ class OJSDepositObject extends DepositObject
         if ($publication->getData('swordv3StatusDocument')) {
             $statusDocument = new StatusDocument($publication->getData('swordv3StatusDocument'));
         }
-        $this->galleyFilepaths = $this->getGalleyFilepaths($galleys);
         parent::__construct(
             metadata: $this->createDCMetadataDocument($publication, $submission, $context),
-            fileset:  array_values($this->galleyFilepaths),
+            fileset:  $this->getGalleyFileset($galleys),
             statusDocument: $statusDocument,
         );
     }
@@ -72,10 +59,9 @@ class OJSDepositObject extends DepositObject
     }
 
     /**
-     * Get a file path for each Galley in the supported format
-     * and return an assoc array with the galley and the filepath
+     * Get the file path for each galley
      */
-    protected function getGalleyFilepaths(LazyCollection $galleys): array
+    protected function getGalleyFileset(LazyCollection $galleys): array
     {
         return $galleys->map(function(Galley $galley) {
             $submissionFile = Repo::submissionFile()->get($galley->getData('submissionFileId'));
@@ -86,13 +72,9 @@ class OJSDepositObject extends DepositObject
             if (!$file || !in_array($file->mimetype, $this->getSupportedFileFormats())) {
                 return;
             }
-            return [
-                'galley' => $galley,
-                'filepath' => Config::getVar('files', 'files_dir') . '/' . $file->path
-            ];
+            return Config::getVar('files', 'files_dir') . '/' . $file->path;
         })
         ->whereNotNull()
-        ->mapWithKeys(fn(array $g) => [$g['galley']->getId() => $g['filepath']])
         ->all();
     }
 
