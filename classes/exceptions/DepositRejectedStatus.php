@@ -1,6 +1,6 @@
 <?php
 
-namespace APP\plugins\generic\swordv3\exceptions;
+namespace APP\plugins\generic\swordv3\classes\exceptions;
 
 use APP\plugins\generic\swordv3\swordv3Client\Service;
 use APP\plugins\generic\swordv3\swordv3Client\StatusDocument;
