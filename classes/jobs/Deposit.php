@@ -61,7 +61,7 @@ class Deposit extends BaseJob
 
         $depositObject = $this->getDepositObject();
         if (!$depositObject) {
-            $this->log("Aborting deposit because no valid deposit object could be created. This could be because the publication has been deleted, is not published, or because publication, submission or context IDs do not match.");
+            $this->log("Aborting deposit because no valid deposit object could be created. This could be because the publication has been deleted, is not published, or because publication was not found in the expected submission or context.");
             return;
         }
 
