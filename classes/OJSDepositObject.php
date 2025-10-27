@@ -45,8 +45,8 @@ class OJSDepositObject extends DepositObject
         public Journal $context,
     ) {
         $statusDocument = null;
-        if ($publication->getData('swordv3')) {
-            $statusDocument = new StatusDocument($publication->getData('swordv3'));
+        if ($publication->getData('swordv3StatusDocument')) {
+            $statusDocument = new StatusDocument($publication->getData('swordv3StatusDocument'));
         }
         $this->galleyFilepaths = $this->getGalleyFilepaths($galleys);
         parent::__construct(
