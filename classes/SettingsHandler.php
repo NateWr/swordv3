@@ -39,6 +39,7 @@ class SettingsHandler extends Handler
                 'add',
                 'deposit',
                 'csv',
+                'redepositAll',
                 'reset',
             ],
         );
@@ -175,7 +176,7 @@ class SettingsHandler extends Handler
      * Dispatch jobs to deposit all publications that have not yet
      * been deposited
      *
-     * This does not create a job for publications witha  rejected,
+     * This does not create a job for publications with a rejected,
      * deleted or unknown status.
      */
     public function deposit($args, Request $request): void
@@ -218,7 +219,7 @@ class SettingsHandler extends Handler
      * Export a CSV file with all publications that have a
      * deposit status document
      */
-    public function csv($args, Request $request)
+    public function csv($args, Request $request): void
     {
         $context = Application::get()->getRequest()->getContext();
 
@@ -252,6 +253,44 @@ class SettingsHandler extends Handler
         }
         flush();
         fclose($fh);
+    }
+
+    /**
+     * Re-deposit all previously deposited Publications
+     *
+     * This deposits all items again regardless of their status.
+     * It can be used if the service configuration has changed
+     * in some way that may result in a different deposit. For
+     * example, if a service begins accepting PDF deposits it
+     * might be useful to re-deposit the publications.
+     */
+    public function redepositAll($args, Request $request): void
+    {
+        $context = Application::get()->getRequest()->getContext();
+
+        $services = $this->plugin->getServices($context->getId());
+        if (!count($services)) {
+            throw new Exception('No SWORDv3 service configured for deposits.');
+        }
+
+        // TODO: support more than one service
+        /** @var OJSService $service */
+        $service = $services[0];
+
+        (new Collector($context->getId()))->getWithDepositState(null)
+            ->each(function($row) use ($context, $service) {
+                dispatch(
+                    new Deposit(
+                        $row->publication_id,
+                        $row->submission_id,
+                        $context->getId(),
+                        $service->url
+                    )
+                );
+            });
+
+        $request->redirect(null, 'management', 'settings', ['distribution'], null, 'swordv3');
+
     }
 
     /**
