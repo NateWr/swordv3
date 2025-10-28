@@ -126,6 +126,8 @@ class Deposit extends BaseJob
                 throw new DepositDeletedStatus($statusDocument, $this->service);
             }
 
+            $this->log->notice("Metadata deposit successful for {url}.", ['url' => $statusDocument->getObjectId()]);
+
             if (count($depositObject->fileset)) {
                 if ($statusDocument->canAppendFiles()) {
                     foreach ($depositObject->fileset as $file) {
@@ -143,8 +145,26 @@ class Deposit extends BaseJob
             $depositObject->publication = $this->savePublicationStatus($this->publicationId, $statusDocument);
 
             foreach ($statusDocument->getLinks() as $link) {
-                $this->log->notice("Linked resource created at {$link->{'@id'}}.");
+                if (property_exists($link, 'status') && !in_array($link->status, StatusDocument::SUCCESS_STATES)) {
+                    $this->log->warning("Linked resource {linkUrl} was rejected by the service.", ['linkUrl' => $link->{'@id'}]);
+                } else {
+                    $this->log->notice("Linked resource created at {$link->{'@id'}}.");
+                }
             }
+
+            $expectedLinks = (count($depositObject->fileset) + 1);
+            $countLinks = count($statusDocument->getLinks());
+            if ($countLinks < $expectedLinks) {
+                $this->log->warning(
+                    "Expected to find {expected} linked resources but found {count} links for {depositUrl}.",
+                    [
+                        'count' => $countLinks,
+                        'expected' => $expectedLinks,
+                        'depositUrl' => $statusDocument->getObjectId(),
+                    ]
+                );
+            }
+
             $this->log->notice("Deposit Complete");
 
         } catch (AuthenticationUnsupported|AuthenticationRequired|AuthenticationFailed $exception) {
