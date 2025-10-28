@@ -12,6 +12,7 @@ use APP\plugins\generic\swordv3\classes\exceptions\DepositDeletedStatus;
 use APP\plugins\generic\swordv3\classes\exceptions\DepositRejectedStatus;
 use APP\plugins\generic\swordv3\classes\jobs\traits\PublicationSettings;
 use APP\plugins\generic\swordv3\classes\jobs\traits\ServiceHelper;
+use APP\plugins\generic\swordv3\classes\Logger;
 use APP\plugins\generic\swordv3\swordv3Client\Client;
 use APP\plugins\generic\swordv3\swordv3Client\exceptions\AuthenticationFailed;
 use APP\plugins\generic\swordv3\swordv3Client\exceptions\AuthenticationRequired;
@@ -20,12 +21,10 @@ use APP\plugins\generic\swordv3\swordv3Client\exceptions\DigestFormatNotFound;
 use APP\plugins\generic\swordv3\swordv3Client\StatusDocument;
 use APP\plugins\generic\swordv3\Swordv3Plugin;
 use APP\submission\Submission;
-use DateTime;
 use GuzzleHttp\Exception\ConnectException;
 use GuzzleHttp\Exception\RequestException;
 use Illuminate\Mail\Mailable;
 use Illuminate\Support\Facades\Mail;
-use PKP\config\Config;
 use PKP\context\Context;
 use PKP\db\DAORegistry;
 use PKP\jobs\BaseJob;
@@ -40,6 +39,7 @@ class Deposit extends BaseJob
     use ServiceHelper;
 
     protected ?OJSService $service = null;
+    protected Logger $log;
 
     public function __construct(
         protected int $publicationId,
@@ -47,27 +47,36 @@ class Deposit extends BaseJob
         protected int $contextId,
         protected string $serviceUrl,
     ) {
+        $this->log = new Logger($this->contextId, $this->submissionId, $this->publicationId);
         parent::__construct();
     }
 
     public function handle(): void
     {
-        $this->log("Preparing to deposit Publication {$this->publicationId}, Submission {$this->submissionId}, Context {$this->contextId} to {$this->serviceUrl}.");
+        $this->log->notice(
+            "Preparing to deposit Publication {publicationId}, Submission {submissionId}, Context {contextId} to {serviceUrl}.",
+            [
+                'publicationId' => $this->publicationId,
+                'submissionId' => $this->submissionId,
+                'contextId' => $this->contextId,
+                'serviceUrl' => $this->serviceUrl,
+            ]
+        );
 
         $this->service = $this->getServiceByUrl($this->contextId, $this->serviceUrl);
 
         if (!$this->service) {
-            $this->log("Aborting deposit because deposit service settings can not be found.");
+            $this->log->warning("Aborting deposit because deposit service settings can not be found.");
         }
 
         if (!$this->service->enabled) {
-            $this->log("Aborting deposit because deposit service has been disabled.");
+            $this->log->warning("Aborting deposit because deposit service has been disabled.");
             return;
         }
 
         $depositObject = $this->getDepositObject();
         if (!$depositObject) {
-            $this->log("Aborting deposit because no valid deposit object could be created. This could be because the publication has been deleted, is not published, or because the publication was not found in the expected submission or context.");
+            $this->log->error("Aborting deposit because no valid deposit object could be created. This could be because the publication has been deleted, is not published, or because the publication was not found in the expected submission or context.");
             return;
         }
 
@@ -76,8 +85,13 @@ class Deposit extends BaseJob
             service: $this->service,
         );
 
-        $countGalleys = count($depositObject->fileset);
-        $this->log("Ready to deposit metadata and {$countGalleys} galleys in SWORDv3 service \"{$this->service->name}\".");
+        $this->log->notice(
+            "Ready to deposit metadata and {countGalleys} galleys in SWORDv3 service \"{serviceName}\".",
+            [
+                'countGalleys' => count($depositObject->fileset),
+                'serviceName' => $this->service->name,
+            ]
+        );
 
         try {
             $serviceDocument = $client->getServiceDocument();
@@ -89,14 +103,17 @@ class Deposit extends BaseJob
             }
 
             if ($depositObject?->statusDocument) {
-                $this->log("Replacing existing deposit object at {$depositObject->statusDocument->getObjectId()}.");
+                $this->log->notice(
+                    "Replacing existing deposit object at {url}.",
+                    ['url' => $depositObject->statusDocument->getObjectId()]
+                );
                 $response = $client->replaceObjectWithMetadata(
                     $depositObject->statusDocument->getObjectId(),
                     $depositObject->metadata,
                     $serviceDocument
                 );
             } else {
-                $this->log("Creating new deposit object.");
+                $this->log->notice("Creating new deposit object.");
                 $response = $client->createObjectWithMetadata(
                     $depositObject->metadata,
                     $serviceDocument
@@ -117,13 +134,13 @@ class Deposit extends BaseJob
             if (count($depositObject->fileset)) {
                 if ($statusDocument->canAppendFiles()) {
                     foreach ($depositObject->fileset as $file) {
-                        $this->log("Depositing {$file} to {$statusDocument->getObjectId()}.");
+                        $this->log->notice("Depositing {$file} to {$statusDocument->getObjectId()}.");
                         $response = $client->appendObjectFile($statusDocument->getObjectId(), $file, $serviceDocument);
                         $statusDocument = new StatusDocument($response->getBody());
                         $depositObject->publication = $this->savePublicationStatus($this->publicationId, $statusDocument);
                     }
                 } else {
-                    $this->log("Skipping file deposits because the service has indicated that it does not support file deposits for this object.");
+                    $this->log->notice("Skipping file deposits because the service has indicated that it does not support file deposits for this object.");
                 }
             }
 
@@ -131,33 +148,39 @@ class Deposit extends BaseJob
             $depositObject->publication = $this->savePublicationStatus($this->publicationId, $statusDocument);
 
             foreach ($statusDocument->getLinks() as $link) {
-                $this->log("Linked resource created at {$link->{'@id'}}.");
+                $this->log->notice("Linked resource created at {$link->{'@id'}}.");
             }
-            $this->log("Deposit Complete");
+            $this->log->notice("Deposit Complete");
 
         } catch (AuthenticationUnsupported|AuthenticationRequired|AuthenticationFailed $exception) {
-            $this->log("Authentication error encountered: {$exception->getMessage()}");
             $error = $this->getAuthErrorMessage($exception);
+            $this->log->critical("Authentication error encountered: {error}", ['error' => $error]);
             $this->disableService($error);
             $this->notifyServiceDisabled($error, $depositObject->context);
             return;
         } catch (DepositsNotAccepted $exception) {
-            $this->log("Deposit aborted: {$exception->getMessage()}");
+            $this->log->critical("Deposit aborted: {exception}", ['exception' => $exception->getMessage()]);
             $error = __('plugins.generic.swordv3.service.depositsNotAccepted');
             $this->disableService($error);
             $this->notifyServiceDisabled($error, $depositObject->context);
             return;
         } catch (DigestFormatNotFound $exception) {
-            $this->log("Deposit aborted: {$exception->getMessage()}");
+            $this->log->critical("Deposit aborted: {exception}", ['exception' => $exception->getMessage()]);
             $error = __('plugins.generic.swordv3.service.digestNotAccepted');
             $this->disableService($error);
             $this->notifyServiceDisabled($error, $depositObject->context);
             return;
         } catch (DepositRejectedStatus|DepositDeletedStatus $exception) {
-            $this->log("Deposit aborted: {$exception->getMessage()}");
+            $this->log->warning("Deposit failed: {exception}", ['exception' => $exception->getMessage()]);
             return;
         } catch (RequestException|ConnectException $exception) {
-            $this->log("HTTP error encountered at {$exception->getRequest()->getUri()}\n  {$exception->getMessage()}");
+            $this->log->critical(
+                "HTTP error encountered at {url}: {exception}",
+                [
+                    'url' => $exception->getRequest()->getUri(),
+                    'exception' => $exception->getMessage(),
+                ]
+            );
             $this->disableService($exception->getMessage());
             $this->notifyServiceDisabled($exception->getMessage(), $depositObject->context);
             return;
@@ -202,25 +225,6 @@ class Deposit extends BaseJob
     }
 
     /**
-     * Write to a deposit log file
-     */
-    protected function log(string $msg): void
-    {
-        $filename = Config::getVar('files', 'files_dir') . '/swordv3.log';
-        $time = (new DateTime())->format('Y-m-d h:i:s');
-        $deposit = "{$this->contextId}-{$this->submissionId}-{$this->publicationId}";
-        try {
-            file_put_contents(
-                $filename,
-                "\n[{$time}] [{$deposit}] {$msg}",
-                FILE_APPEND
-            );
-        } catch (Throwable $e) {
-            error_log($e->getMessage());
-        }
-    }
-
-    /**
      * Get a user-facing error message for an authentication error
      */
     protected function getAuthErrorMessage(AuthenticationUnsupported|AuthenticationRequired|AuthenticationFailed $exception): string
@@ -242,6 +246,7 @@ class Deposit extends BaseJob
                     'authMode' => $exception->service->authMode->getMode(),
                     'supportedModes' => join(__('common.commaListSeparator'), $exception->serviceDocument->getAuthModes()),
                 ]);
+                break;
         }
 
         return $error;
@@ -258,7 +263,7 @@ class Deposit extends BaseJob
         $recipients = $this->getErrorEmailRecipients($context);
 
         if (!$recipients) {
-            $this->log(__('plugins.generic.swordv3.notification.recipientsNotFound'));
+            $this->log->critical(__('plugins.generic.swordv3.notification.recipientsNotFound'));
             return;
         }
 
