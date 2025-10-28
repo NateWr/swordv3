@@ -120,12 +120,6 @@ class Client
      * Send a HTTP request
      *
      * Reformats some HTTP exceptions emitted from Guzzle.
-     *
-     * @throws AuthenticationRequired
-     * @throws AuthenticationFailed
-     * @throws BadRequest
-     * @throws PageNotFound
-     * @throws RequestException
      */
     public function send(Request $request): ResponseInterface
     {
@@ -134,8 +128,7 @@ class Client
                 $request->withAddedHeader('Authorization', $this->service->authMode->getAuthorizationHeader())
             );
         } catch (RequestException $exception) {
-            $exceptionClass = $this->getRequestException($exception);
-            throw new $exceptionClass($exception, $this);
+            $this->throwRequestException($exception);
         }
         return $response;
     }
@@ -149,15 +142,32 @@ class Client
         ];
     }
 
-    protected function getRequestException(RequestException $exception): string
+    /**
+     * @throws AuthenticationRequired
+     * @throws AuthenticationFailed
+     * @throws BadRequest
+     * @throws PageNotFound
+     * @throws RequestException
+     */
+    protected function throwRequestException(RequestException $exception): void
     {
+        $class = '';
         switch ($exception->getResponse()->getStatusCode()) {
-            case 400: return BadRequest::class;
-            case 401: return AuthenticationRequired::class;
-            case 403: return AuthenticationFailed::class;
-            case 404: return PageNotFound::class;
-            default: return RequestException::class;
+            case 400: $class = BadRequest::class; break;
+            case 401: $class = AuthenticationRequired::class; break;
+            case 403: $class = AuthenticationFailed::class; break;
+            case 404: $class = PageNotFound::class; break;
         }
+        if ($class) {
+            throw new $class(
+                message: $exception->getMessage(),
+                request: $exception->getRequest(),
+                response: $exception->getResponse(),
+                handlerContext: $exception->getHandlerContext(),
+                previous: $exception->getPrevious(),
+            );
+        }
+        throw $exception;
     }
 
     /**
