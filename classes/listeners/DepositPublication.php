@@ -3,7 +3,6 @@
 namespace APP\plugins\generic\swordv3\classes\listeners;
 
 use APP\plugins\generic\swordv3\classes\jobs\Deposit;
-use APP\plugins\generic\swordv3\classes\OJSService;
 use APP\plugins\generic\swordv3\Swordv3Plugin;
 use PKP\observers\events\PublicationPublished;
 use PKP\plugins\PluginRegistry;
@@ -15,21 +14,16 @@ class DepositPublication
         /** @var Swordv3Plugin $plugin */
         $plugin = PluginRegistry::getPlugin('generic', 'swordv3plugin');
         $services = $plugin->getServices($publishedEvent->context->getId());
-        if (!count($services)) {
-            return;
+
+        foreach ($services as $service) {
+            dispatch(
+                new Deposit(
+                    $publishedEvent->submission->getCurrentPublication()->getId(),
+                    $publishedEvent->submission->getId(),
+                    $publishedEvent->context->getId(),
+                    $service->url
+                )
+            );
         }
-
-        // @TODO support more than one service
-        /** @var OJSService $service */
-        $service = $services[0];
-
-        dispatch(
-            new Deposit(
-                $publishedEvent->submission->getCurrentPublication()->getId(),
-                $publishedEvent->submission->getId(),
-                $publishedEvent->context->getId(),
-                $service->url
-            )
-        );
     }
 }

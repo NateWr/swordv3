@@ -25,36 +25,34 @@ class CheckInProgressDeposits extends ScheduledTask
                 StatusDocument::STATE_IN_WORKFLOW,
                 StatusDocument::STATE_ACCEPTED,
             ]);
-            $service = $this->getService($contextId);
-            if (!$rows->count() || !$service) {
+            $services = $this->getServices($contextId);
+            if (!$rows->count() || !count($services)) {
                 continue;
             }
-            $rows->each(function($row) use ($contextId, $service) {
-                dispatch(
-                    new UpdateDepositProgress(
-                        $row->publication_id,
-                        $row->submission_id,
-                        $contextId,
-                        $service->url
-                    )
-                );
+            $rows->each(function($row) use ($contextId, $services) {
+                foreach ($services as $service) {
+                    dispatch(
+                        new UpdateDepositProgress(
+                            $row->publication_id,
+                            $row->submission_id,
+                            $contextId,
+                            $service->url
+                        )
+                    );
+                }
             });
         }
 
         return true;
     }
 
-    protected function getService(int $contextId): ?OJSService
+    /**
+     * @return OJSService[]
+     */
+    protected function getServices(int $contextId): ?OJSService
     {
         /** @var Swordv3Plugin $plugin */
         $plugin = PluginRegistry::getPlugin('generic', 'swordv3plugin');
-        $services = $plugin->getServices($contextId);
-        if (!count($services)) {
-            return null;
-        }
-
-        // TODO: support more than one service
-        /** @var OJSService $service */
-        return $services[0];
+        return $plugin->getServices($contextId) ?? [];
     }
 }

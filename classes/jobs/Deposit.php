@@ -11,6 +11,7 @@ use APP\plugins\generic\swordv3\classes\OJSService;
 use APP\plugins\generic\swordv3\classes\exceptions\DepositDeletedStatus;
 use APP\plugins\generic\swordv3\classes\exceptions\DepositRejectedStatus;
 use APP\plugins\generic\swordv3\classes\jobs\traits\PublicationSettings;
+use APP\plugins\generic\swordv3\classes\jobs\traits\ServiceHelper;
 use APP\plugins\generic\swordv3\swordv3Client\Client;
 use APP\plugins\generic\swordv3\swordv3Client\exceptions\AuthenticationFailed;
 use APP\plugins\generic\swordv3\swordv3Client\exceptions\AuthenticationRequired;
@@ -36,8 +37,9 @@ use Throwable;
 class Deposit extends BaseJob
 {
     use PublicationSettings;
+    use ServiceHelper;
 
-    protected OJSService $service;
+    protected ?OJSService $service = null;
 
     public function __construct(
         protected int $publicationId,
@@ -52,7 +54,7 @@ class Deposit extends BaseJob
     {
         $this->log("Preparing to deposit Publication {$this->publicationId}, Submission {$this->submissionId}, Context {$this->contextId} to {$this->serviceUrl}.");
 
-        $this->service = $this->getService($this->serviceUrl);
+        $this->service = $this->getServiceByUrl($this->contextId, $this->serviceUrl);
 
         if (!$this->service) {
             $this->log("Aborting deposit because deposit service settings can not be found.");
@@ -367,19 +369,6 @@ class Deposit extends BaseJob
                 null,
                 'swordv3'
             );
-    }
-
-    protected function getService(string $url): ?OJSService
-    {
-        /** @var Swordv3Plugin $plugin */
-        $plugin = PluginRegistry::getPlugin('generic', 'swordv3plugin');
-        $services = $plugin->getServices($this->contextId);
-        foreach ($services as $service) {
-            if ($service->url === $url) {
-                return $service;
-            }
-        }
-        return null;
     }
 
     protected function disableService(string $reason): void
