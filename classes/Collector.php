@@ -46,6 +46,34 @@ class Collector
         return $qb->get();
     }
 
+    /**
+     * Get the swordv3 deposit details for all publications that
+     * have been deposited
+     */
+    public function getDepositDetails(): array
+    {
+        $publications = Repo::publication()->getCollector()
+            ->filterByContextIds([$this->contextId])
+            ->getQueryBuilder()
+            ->join('publication_settings as ps', 'ps.publication_id', '=', 'p.publication_id')
+            ->whereIn('ps.setting_name', ['swordv3DateDeposited', 'swordv3State', 'swordv3StatusDocument'])
+            ->select(['p.publication_id', 'p.submission_id', 'ps.setting_name', 'ps.setting_value'])
+            ->get()
+            ->reduce(function (array $publications, object $row) {
+                if (!isset($publications[$row->publication_id])) {
+                    $publications[$row->publication_id] = [
+                        'contextId' => $this->contextId,
+                        'submissionId' => $row->submission_id,
+                        'publicationId' => $row->publication_id,
+                    ];
+                }
+                $publications[$row->publication_id][$row->setting_name] = $row->setting_value;
+                return $publications;
+            }, []);
+
+        return $publications;
+    }
+
     protected function getDepositStatusQueryBuilder(): Builder
     {
         return $this->getAllPublishedQueryBuilder()

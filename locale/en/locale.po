@@ -49,17 +49,17 @@ msgstr "Connected successfully to the service, but it does not accept deposits. 
 msgid "plugins.generic.swordv3.service.digestNotAccepted"
 msgstr "No compatible digest format could be found to validate file integrity with this deposit service."
 
-msgid "plugins.generic.swordv3.status.pending"
-msgstr "Pending"
+msgid "plugins.generic.swordv3.status.ready"
+msgstr "Ready to Deposit"
 
-msgid "plugins.generic.swordv3.status.pending.description"
-msgstr "Publications that have not yet been deposited."
+msgid "plugins.generic.swordv3.status.ready.description"
+msgstr "Published items that have not yet been deposited."
 
 msgid "plugins.generic.swordv3.status.deposited"
 msgstr "Deposited"
 
 msgid "plugins.generic.swordv3.status.deposited.description"
-msgstr "Deposits ingested or accepted or queued for processing by the service."
+msgstr "Deposits ingested, accepted or queued for processing by the service."
 
 msgid "plugins.generic.swordv3.status.rejected"
 msgstr "Rejected"

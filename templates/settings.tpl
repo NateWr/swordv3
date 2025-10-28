@@ -10,10 +10,10 @@
           <table style="text-align: left;">
             <tr>
               <th scope="row">
-                {translate key="plugins.generic.swordv3.status.pending"}
+                {translate key="plugins.generic.swordv3.status.ready"}
               </th>
               <td>
-                {translate key="plugins.generic.swordv3.status.pending.description"}
+                {translate key="plugins.generic.swordv3.status.ready.description"}
               </td>
               <td>{$notDeposited}</td>
             </tr>
@@ -57,6 +57,9 @@
           <div class="flex items-center gap-4">
             <a href="{url page="swordv3" op="deposit"}" class="px-2 border rounded">
               Deposit
+            </a>
+            <a href="{url page="swordv3" op="csv"}" class="px-2 border rounded">
+              Export to CSV
             </a>
             <a href="{url page="swordv3" op="reset"}" class="px-2 border rounded">
               RESET

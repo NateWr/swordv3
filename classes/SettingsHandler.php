@@ -12,12 +12,14 @@ use APP\plugins\generic\swordv3\swordv3Client\exceptions\AuthenticationFailed;
 use APP\plugins\generic\swordv3\swordv3Client\exceptions\AuthenticationUnsupported;
 use APP\plugins\generic\swordv3\swordv3Client\ServiceDocument;
 use APP\plugins\generic\swordv3\Swordv3Plugin;
+use DateTime;
 use Exception;
 use GuzzleHttp\Exception\ConnectException;
 use GuzzleHttp\Exception\RequestException;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
+use PHPUnit\Runner\Baseline\Writer;
 use PKP\security\authorization\CanAccessSettingsPolicy;
 use PKP\security\authorization\ContextAccessPolicy;
 use PKP\security\Role;
@@ -33,7 +35,12 @@ class SettingsHandler extends Handler
 
         $this->addRoleAssignment(
             [Role::ROLE_ID_SITE_ADMIN, Role::ROLE_ID_MANAGER],
-            ['add', 'deposit', 'reset'],
+            [
+                'add',
+                'deposit',
+                'csv',
+                'reset',
+            ],
         );
     }
 
@@ -205,6 +212,46 @@ class SettingsHandler extends Handler
             });
 
         $request->redirect(null, 'management', 'settings', ['distribution'], null, 'swordv3');
+    }
+
+    /**
+     * Export a CSV file with all publications that have a
+     * deposit status document
+     */
+    public function csv($args, Request $request)
+    {
+        $context = Application::get()->getRequest()->getContext();
+
+        $columns = [
+            'contextId' => 'Context',
+            'submissionId' => 'Submission',
+            'publicationId' => 'Publication',
+            'swordv3DateDeposited' => 'Date Deposited',
+            'swordv3State' => 'State',
+            'swordv3StatusDocument' => 'StatusDocument',
+        ];
+
+        $rows = (new Collector($context->getId()))->getDepositDetails();
+        $rows = array_map(function($row) use ($columns) {
+            $cols = [];
+            foreach ($columns as $key => $name) {
+                $cols[$key] = isset($row[$key]) ? $row[$key] : '';
+            }
+            return $cols;
+        }, $rows);
+
+        $filename = 'swordv3-export-' . (new DateTime())->format('Y-m-d-h-i') . '.csv';
+
+        header('Content-Description: File Transfer');
+        header('Content-type: text/csv');
+        header("Content-Disposition: attachment; filename={$filename}");
+        $fh = fopen('php://output', 'wb');
+        fputcsv($fh, array_values($columns));
+        foreach ($rows as $row) {
+            fputcsv($fh, $row);
+        }
+        flush();
+        fclose($fh);
     }
 
     /**
