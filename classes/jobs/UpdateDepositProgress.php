@@ -2,6 +2,7 @@
 namespace APP\plugins\generic\swordv3\classes\jobs;
 
 use APP\core\Application;
+use APP\plugins\generic\swordv3\classes\jobs\traits\ErrorNotification;
 use APP\plugins\generic\swordv3\classes\jobs\traits\PublicationSettings;
 use APP\plugins\generic\swordv3\classes\jobs\traits\ServiceHelper;
 use APP\plugins\generic\swordv3\classes\Logger;
@@ -13,12 +14,14 @@ use APP\plugins\generic\swordv3\swordv3Client\exceptions\AuthenticationUnsupport
 use APP\plugins\generic\swordv3\swordv3Client\StatusDocument;
 use GuzzleHttp\Exception\ConnectException;
 use GuzzleHttp\Exception\RequestException;
+use PKP\context\Context;
+use PKP\db\DAORegistry;
 use PKP\jobs\BaseJob;
-use PKP\plugins\PluginRegistry;
 use Throwable;
 
 class UpdateDepositProgress extends BaseJob
 {
+    use ErrorNotification;
     use PublicationSettings;
     use ServiceHelper;
 
@@ -65,7 +68,10 @@ class UpdateDepositProgress extends BaseJob
             $publication = $this->savePublicationStatus($this->publicationId, $newStatusDocument);
             $this->log->notice("Updated deposit state to {$newStatusDocument->getSwordStateId()} and saved a new StatusDocument.");
         } catch (AuthenticationUnsupported|AuthenticationRequired|AuthenticationFailed $exception) {
-            $this->log->critical("Authentication error encountered: {$exception}", ['exception' => $exception->getMessage()]);
+            $error = $this->getAuthErrorMessage($exception);
+            $this->log->critical("Authentication error encountered: {error}", ['error' => $error]);
+            $this->disableService($error, $this->service->url, $this->contextId);
+            $this->notifyServiceDisabled($error, $this->service, $this->getContext());
             return;
         } catch (RequestException|ConnectException $exception) {
             $this->log->critical(
@@ -81,28 +87,10 @@ class UpdateDepositProgress extends BaseJob
         }
     }
 
-    protected function disableService(string $reason): void
+    protected function getContext(): Context
     {
-        /** @var Swordv3Plugin $plugin */
-        $plugin = PluginRegistry::getPlugin('generic', 'swordv3plugin');
-        $data = $plugin->getSetting($this->contextId, 'services');
-        if (!is_array($data) || !count($data)) {
-            $data = [];
-        }
-
-        $newData = collect($data)
-            ->map(function(array $service) use ($reason) {
-                if ($this->service->url === $service['url']) {
-                    $service['enabled'] = false;
-                    $service['statusMessage'] = $reason;
-                }
-                return $service;
-            });
-
-        $plugin->updateSetting(
-            $this->contextId,
-            'services',
-            $newData
-        );
+        /** @var JournalDAO $contextDao */
+        $contextDao = DAORegistry::getDAO('JournalDAO');
+        return $contextDao->getById($this->contextId);
     }
 }
