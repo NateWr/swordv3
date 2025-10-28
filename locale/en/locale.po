@@ -108,3 +108,6 @@ msgstr "This is an automated email sent by the {$plugin} plugin."
 
 msgid "plugins.generic.swordv3.notification.recipientsNotFound"
 msgstr "Unable to send a notification email about a failed deposit. No valid recipients were found among journal managers, site administrator, or the technical support contact."
+
+msgid "plugins.generic.swordv3.task.checkInProgressDeposits"
+msgstr "Update status of in progress swordv3 deposits"

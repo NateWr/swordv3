@@ -10,6 +10,7 @@ use APP\plugins\generic\swordv3\classes\OJSDepositObject;
 use APP\plugins\generic\swordv3\classes\OJSService;
 use APP\plugins\generic\swordv3\classes\exceptions\DepositDeletedStatus;
 use APP\plugins\generic\swordv3\classes\exceptions\DepositRejectedStatus;
+use APP\plugins\generic\swordv3\classes\jobs\traits\PublicationSettings;
 use APP\plugins\generic\swordv3\swordv3Client\Client;
 use APP\plugins\generic\swordv3\swordv3Client\exceptions\AuthenticationFailed;
 use APP\plugins\generic\swordv3\swordv3Client\exceptions\AuthenticationRequired;
@@ -17,7 +18,6 @@ use APP\plugins\generic\swordv3\swordv3Client\exceptions\AuthenticationUnsupport
 use APP\plugins\generic\swordv3\swordv3Client\exceptions\DigestFormatNotFound;
 use APP\plugins\generic\swordv3\swordv3Client\StatusDocument;
 use APP\plugins\generic\swordv3\Swordv3Plugin;
-use APP\publication\Publication;
 use APP\submission\Submission;
 use DateTime;
 use GuzzleHttp\Exception\ConnectException;
@@ -35,6 +35,8 @@ use Throwable;
 
 class Deposit extends BaseJob
 {
+    use PublicationSettings;
+
     protected OJSService $service;
 
     public function __construct(
@@ -100,7 +102,7 @@ class Deposit extends BaseJob
             }
 
             $statusDocument = new StatusDocument($response->getBody());
-            $depositObject->publication = $this->savePublicationStatus($depositObject->publication, $statusDocument);
+            $depositObject->publication = $this->savePublicationStatus($this->publicationId, $statusDocument);
 
             if ($statusDocument->getSwordStateId() === StatusDocument::STATE_REJECTED) {
                 throw new DepositRejectedStatus($statusDocument, $this->service);
@@ -116,7 +118,7 @@ class Deposit extends BaseJob
                         $this->log("Depositing {$file} to {$statusDocument->getObjectId()}.");
                         $response = $client->appendObjectFile($statusDocument->getObjectId(), $file, $serviceDocument);
                         $statusDocument = new StatusDocument($response->getBody());
-                        $depositObject->publication = $this->savePublicationStatus($depositObject->publication, $statusDocument);
+                        $depositObject->publication = $this->savePublicationStatus($this->publicationId, $statusDocument);
                     }
                 } else {
                     $this->log("Skipping file deposits because the service has indicated that it does not support file deposits for this object.");
@@ -124,7 +126,7 @@ class Deposit extends BaseJob
             }
 
             $statusDocument = new StatusDocument($client->getStatusDocument($statusDocument->getObjectId())->getBody());
-            $depositObject->publication = $this->savePublicationStatus($depositObject->publication, $statusDocument);
+            $depositObject->publication = $this->savePublicationStatus($this->publicationId, $statusDocument);
 
             foreach ($statusDocument->getLinks() as $link) {
                 $this->log("Linked resource created at {$link->{'@id'}}.");
@@ -168,7 +170,7 @@ class Deposit extends BaseJob
      */
     protected function getDepositObject(): ?OJSDepositObject
     {
-        $publication = Repo::publication()->get($this->publicationId);
+        $publication = $this->getPublication($this->publicationId);
         $galleys = Repo::galley()->getCollector()
                 ->filterByPublicationIds([$publication->getId()])
                 ->getMany();
@@ -195,27 +197,6 @@ class Deposit extends BaseJob
             $submission,
             $context
         );
-    }
-
-    /**
-     * Store the StatusDocument and other metadata related to the deposit
-     * action in the Publication settings
-     *
-     * @return Publication A fresh copy of the publication with the new status data
-     */
-    protected function savePublicationStatus(Publication $publication, StatusDocument $statusDocument): Publication
-    {
-        $newPublication = Repo::publication()->newDataObject(
-            array_merge(
-                $publication->_data, [
-                    'swordv3DateDeposited' => (new DateTime()->format('Y-m-d h:i:s')),
-                    'swordv3State' => $statusDocument->getSwordStateId(),
-                    'swordv3StatusDocument' => json_encode($statusDocument->getStatusDocument()),
-                ]
-            )
-        );
-        Repo::publication()->dao->update($newPublication, $publication);
-        return Repo::publication()->get($newPublication->getId());
     }
 
     /**

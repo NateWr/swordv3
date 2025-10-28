@@ -8,6 +8,7 @@ use APP\plugins\generic\swordv3\classes\listeners\DepositPublication;
 use APP\plugins\generic\swordv3\classes\OJSService;
 use APP\plugins\generic\swordv3\classes\ServiceForm;
 use APP\plugins\generic\swordv3\classes\SettingsHandler;
+use APP\plugins\generic\swordv3\classes\task\CheckInProgressDeposits;
 use APP\plugins\generic\swordv3\swordv3Client\auth\APIKey;
 use APP\plugins\generic\swordv3\swordv3Client\auth\Basic;
 use APP\plugins\generic\swordv3\swordv3Client\StatusDocument;
@@ -19,12 +20,11 @@ use PKP\linkAction\request\RedirectAction;
 use PKP\observers\events\PublicationPublished;
 use PKP\plugins\GenericPlugin;
 use PKP\plugins\Hook;
+use PKP\plugins\interfaces\HasTaskScheduler;
+use PKP\scheduledTask\PKPScheduler;
 
-class Swordv3Plugin extends GenericPlugin
+class Swordv3Plugin extends GenericPlugin implements HasTaskScheduler
 {
-    /**
-     * @copydoc Plugin::register
-     */
     public function register($category, $path, $mainContextId = NULL)
     {
         $success = parent::register($category, $path);
@@ -41,25 +41,16 @@ class Swordv3Plugin extends GenericPlugin
         return $success;
     }
 
-    /**
-     * @copydoc Plugin::getDisplayName()
-     */
     public function getDisplayName()
     {
         return __('plugins.generic.swordv3.name');
     }
 
-    /**
-     * @copydoc Plugin::getDescription()
-     */
     public function getDescription()
     {
         return __('plugins.generic.swordv3.description');
     }
 
-    /**
-     * @copydoc Plugin::getActions()
-     */
     public function getActions($request, $verb)
     {
         $actions = [];
@@ -223,5 +214,14 @@ class Swordv3Plugin extends GenericPlugin
             $service['enabled'],
             $service['statusMessage']
         );
+    }
+
+    public function registerSchedules(PKPScheduler $scheduler): void
+    {
+        $scheduler
+            ->addSchedule(new CheckInProgressDeposits())
+            ->daily()
+            ->name(CheckInProgressDeposits::class)
+            ->withoutOverlapping();
     }
 }
