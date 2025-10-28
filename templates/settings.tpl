@@ -61,8 +61,14 @@
             <a href="{url page="swordv3" op="csv"}" class="px-2 border rounded">
               Export to CSV
             </a>
-            <a href="{url page="swordv3" op="redepositAll"}" class="px-2 border rounded">
+            <a href="{url page="swordv3" op="redeposit"}" class="px-2 border rounded">
               Re-deposit All
+            </a>
+            <a href="{url page="swordv3" op="redeposit" path="rejected"}" class="px-2 border rounded">
+              Re-deposit Rejected
+            </a>
+            <a href="{url page="swordv3" op="redeposit" path="deleted"}" class="px-2 border rounded">
+              Re-deposit Deleted
             </a>
             <a href="{url page="swordv3" op="reset"}" class="px-2 border rounded">
               RESET

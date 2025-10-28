@@ -11,6 +11,7 @@ use APP\plugins\generic\swordv3\swordv3Client\Client;
 use APP\plugins\generic\swordv3\swordv3Client\exceptions\AuthenticationFailed;
 use APP\plugins\generic\swordv3\swordv3Client\exceptions\AuthenticationUnsupported;
 use APP\plugins\generic\swordv3\swordv3Client\ServiceDocument;
+use APP\plugins\generic\swordv3\swordv3Client\StatusDocument;
 use APP\plugins\generic\swordv3\Swordv3Plugin;
 use DateTime;
 use Exception;
@@ -19,7 +20,6 @@ use GuzzleHttp\Exception\RequestException;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
-use PHPUnit\Runner\Baseline\Writer;
 use PKP\security\authorization\CanAccessSettingsPolicy;
 use PKP\security\authorization\ContextAccessPolicy;
 use PKP\security\Role;
@@ -39,7 +39,7 @@ class SettingsHandler extends Handler
                 'add',
                 'deposit',
                 'csv',
-                'redepositAll',
+                'redeposit',
                 'reset',
             ],
         );
@@ -256,15 +256,21 @@ class SettingsHandler extends Handler
     }
 
     /**
-     * Re-deposit all previously deposited Publications
+     * Re-deposit previously deposited Publications
      *
-     * This deposits all items again regardless of their status.
+     * This deposits all items or those items with the passed state.
      * It can be used if the service configuration has changed
-     * in some way that may result in a different deposit. For
-     * example, if a service begins accepting PDF deposits it
-     * might be useful to re-deposit the publications.
+     * in some way that may result in a different deposit.
+     *
+     * For example, if a service begins accepting PDF deposits it
+     * might be useful to re-deposit all publications. Or it may
+     * be useful to re-deposit all rejected publications if there
+     * was a misconfiguration with the depositing service.
+     *
+     * @param array $args
+     * @param string $args[0] Only re-deposit publications with this status. One of: rejected,deleted
      */
-    public function redepositAll($args, Request $request): void
+    public function redeposit($args, Request $request): void
     {
         $context = Application::get()->getRequest()->getContext();
 
@@ -277,7 +283,19 @@ class SettingsHandler extends Handler
         /** @var OJSService $service */
         $service = $services[0];
 
-        (new Collector($context->getId()))->getWithDepositState(null)
+        $states = null;
+        if (isset($args[0])) {
+            if ($args[0] === 'rejected') {
+                $states = [StatusDocument::STATE_REJECTED];
+            } else if ($args[0] === 'deleted') {
+                $states = [StatusDocument::STATE_DELETED];
+            }
+            if (is_null($states)) {
+                throw new Exception("Redeposit requested for unknown state: {$args[0]}");
+            }
+        }
+
+        (new Collector($context->getId()))->getWithDepositState($states)
             ->each(function($row) use ($context, $service) {
                 dispatch(
                     new Deposit(
