@@ -10,6 +10,8 @@ An OJS plugin to deposit article metadata and PDF galleys with a SWORDv3 service
 - [x] Automatic deposit of articles as soon as they are published
 - [x] Manually deposit all previously published articles
 - [x] Notify admin or journal manager when deposits fail
+- [x] Export all deposit status data to CSV
+- [x] Re-deposit rejected articles or all articles
 - [ ] Deposit to more than one service
 - [ ] Deposit individual articles manually
 - [ ] Deposit metadata in OpenAIRE/DataCite format
@@ -26,8 +28,8 @@ This plugin requires **OJS 3.5.0-1+**. Follow these steps to install the plugin 
 1. Navigate to Settings > Website > Plugins > Installed Plugins and enable the SWORDv3 Deposits plugin.
 1. Navigate to Settings > Distribution > SWORDv3 Deposits > Setup.
 1. Configure the connection settings for the SWORDv3 service.
-1. Go to Deposits to view Pending deposits.
-1. Click the Deposit button to deposit any Pending deposits.
+2. Go to Deposits to view articles Ready for Deposit.
+3. Click the Deposit button to deposit any articles Ready for Deposit.
 
 ## Testing
 
@@ -69,6 +71,7 @@ All deposits are handled by OJS's [jobs queue](https://docs.pkp.sfu.ca/dev/docum
 
 - Regular application errors can be found in the server's error log.
 - The plugin creates a log of deposits at `<files_dir>/swordv3.log`.
-- The [Status Document](https://swordapp.github.io/swordv3/swordv3.html#9.6) for deposits is saved under the `setting_name` of `swordv3StatusDocument` for each deposited object (`Publication` and `Galley`).
+- The [Status Document](https://swordapp.github.io/swordv3/swordv3.html#9.6) for deposits is saved under the `setting_name` of `swordv3StatusDocument` for each deposited object (`Publication` and `Galley`). It can also be accessed in the CSV exports.
 - The plugin treats every `Publication` as a unique object. It has not yet been determined how a SWORDv3 server will link multiple versions of an article together.
 - The Reset button can be used to clear all existing Swordv3 deposit data from `Publication` settings. It will not reset the service connection details.
+- Re-deposit All will resend the deposit data for all articles that have already been deposited. If an existing deposit object exists, the deposit will replace it. Otherwise, it will create a new deposit object on the swordv3 server.
