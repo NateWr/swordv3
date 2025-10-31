@@ -12,6 +12,12 @@ use Illuminate\Support\Collection;
  */
 class Collector
 {
+    /**
+     * A job has been queued to deposit this publication,
+     * but it has not yet started.
+     */
+    public const STATUS_QUEUED = 'queued';
+
     public function __construct(public int $contextId)
     {
         //

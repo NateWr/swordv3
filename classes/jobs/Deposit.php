@@ -5,6 +5,7 @@ use APP\core\Application;
 use APP\facades\Repo;
 use APP\journal\Journal;
 use APP\journal\JournalDAO;
+use APP\plugins\generic\swordv3\classes\Collector;
 use APP\plugins\generic\swordv3\classes\exceptions\DepositsNotAccepted;
 use APP\plugins\generic\swordv3\classes\OJSDepositObject;
 use APP\plugins\generic\swordv3\classes\OJSService;
@@ -23,6 +24,7 @@ use APP\plugins\generic\swordv3\swordv3Client\StatusDocument;
 use APP\submission\Submission;
 use GuzzleHttp\Exception\ConnectException;
 use GuzzleHttp\Exception\RequestException;
+use Illuminate\Support\Facades\DB;
 use PKP\db\DAORegistry;
 use PKP\jobs\BaseJob;
 use Throwable;
@@ -42,12 +44,16 @@ class Deposit extends BaseJob
         protected int $contextId,
         protected string $serviceUrl,
     ) {
-        $this->log = new Logger($this->contextId, $this->submissionId, $this->publicationId);
+        $this->setQueuedPublicationStatus();
         parent::__construct();
     }
 
     public function handle(): void
     {
+        $this->removedQueuedPublicationStatus();
+
+        $this->log = new Logger($this->contextId, $this->submissionId, $this->publicationId);
+
         $this->log->notice(
             "Preparing to deposit Publication {publicationId}, Submission {submissionId}, Context {contextId} to {serviceUrl}.",
             [
@@ -237,5 +243,33 @@ class Deposit extends BaseJob
             $submission,
             $context
         );
+    }
+
+    /**
+     * Set a queued flag in the publication settings to track when
+     * a publication is queued for deposit
+     */
+    protected function setQueuedPublicationStatus(): void
+    {
+        DB::table(Repo::publication()->dao->settingsTable)
+            ->updateOrInsert(
+                [
+                    Repo::publication()->dao->getPrimaryKeyName() => $this->publicationId,
+                    'setting_name' => 'swordv3State',
+                ],
+                ['setting_value' => Collector::STATUS_QUEUED]
+            );
+    }
+
+    /**
+     * Set a queued flag in the publication settings to track when
+     * a publication is queued for deposit
+     */
+    protected function removedQueuedPublicationStatus(): void
+    {
+        DB::table(Repo::publication()->dao->settingsTable)
+            ->where('publication_id', $this->publicationId)
+            ->where('setting_name', 'swordv3State')
+            ->delete();
     }
 }

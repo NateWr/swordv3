@@ -4,6 +4,9 @@ msgstr "SWORDv3 Deposits"
 msgid "plugins.generic.swordv3.description"
 msgstr "Send published metadata and PDF galleys to a repository that accepts deposits according to the SWORDv3 protocol."
 
+msgid "plugins.generic.swordv3.serviceRequired"
+msgstr "You must configure a deposit service."
+
 msgid "plugins.generic.swordv3.service.name"
 msgstr "Service Name"
 
@@ -55,11 +58,17 @@ msgstr "Ready to Deposit"
 msgid "plugins.generic.swordv3.status.ready.description"
 msgstr "Published items that have not yet been deposited."
 
+msgid "plugins.generic.swordv3.status.ready.withCount"
+msgstr "There are {$count} publications ready to be deposited."
+
 msgid "plugins.generic.swordv3.status.deposited"
 msgstr "Deposited"
 
 msgid "plugins.generic.swordv3.status.deposited.description"
 msgstr "Deposits ingested, accepted or queued for processing by the service."
+
+msgid "plugins.generic.swordv3.status.deposited.withCount"
+msgstr "There are {$count} publications that have been successfully deposited."
 
 msgid "plugins.generic.swordv3.status.rejected"
 msgstr "Rejected"
@@ -67,17 +76,26 @@ msgstr "Rejected"
 msgid "plugins.generic.swordv3.status.rejected.description"
 msgstr "Deposits rejected by the service."
 
+msgid "plugins.generic.swordv3.status.rejected.withCount"
+msgstr "There are {$count} publications that have been rejected by the deposit service."
+
 msgid "plugins.generic.swordv3.status.deleted"
 msgstr "Deleted"
 
 msgid "plugins.generic.swordv3.status.deleted.description"
 msgstr "Deposits deleted by the service."
 
+msgid "plugins.generic.swordv3.status.deleted.withCount"
+msgstr "There are {$count} publications that have been deleted by the deposit service."
+
 msgid "plugins.generic.swordv3.status.unknown"
 msgstr "Unknown"
 
 msgid "plugins.generic.swordv3.status.unknown.description"
 msgstr "Deposits in an unknown state."
+
+msgid "plugins.generic.swordv3.status.unknown.withCount"
+msgstr "There are {$count} publications that have an unrecognized status. If a publication has an unrecognized status, it may indicate a problem with the deposit."
 
 msgid "plugins.generic.swordv3.disabled"
 msgstr "Deposits to this service were disabled automatically when an error was encountered."
@@ -111,3 +129,54 @@ msgstr "Unable to send a notification email about a failed deposit. No valid rec
 
 msgid "plugins.generic.swordv3.task.checkInProgressDeposits"
 msgstr "Update status of in progress swordv3 deposits"
+
+msgid "plugins.generic.swordv3.action.deposit"
+msgstr "Deposit"
+
+msgid "plugins.generic.swordv3.action.redeposit"
+msgstr "Re-deposit"
+
+msgid "plugins.generic.swordv3.action.depositsQueued"
+msgstr "Queued {$count} publications for deposit at {$service}. It may take several minutes or hours to complete the deposits."
+
+msgid "plugins.generic.swordv3.action.exportToCsv"
+msgstr "Export to CSV"
+
+msgid "plugins.generic.swordv3.action.redeposit"
+msgstr "Re-deposit"
+
+msgid "plugins.generic.swordv3.action.redepositAll"
+msgstr "Re-deposit All Publications"
+
+msgid "plugins.generic.swordv3.action.redepositAll.description"
+msgstr "Force all publications to be deposited again. This will replace all existing deposit data and should be avoided if possible. Only use this feature if your existing deposits are faulty or incomplete, or when the service provider has asked you to redeposit all publications due to a change in their service."
+
+msgid "plugins.generic.swordv3.action.redepositAll.button"
+msgstr "Re-deposit All"
+
+msgid "plugins.generic.swordv3.action.redepositRejected"
+msgstr "Re-deposit Rejected"
+
+msgid "plugins.generic.swordv3.action.redepositDeleted"
+msgstr "Re-deposit Deleted"
+
+msgid "plugins.generic.swordv3.action.redepositUnknown"
+msgstr "Re-deposit Unknown"
+
+msgid "plugins.generic.swordv3.action.redeposit.confirm"
+msgstr "Are you sure you want to re-deposit <strong>{$count} publications</strong> in {$service}?"
+
+msgid "plugins.generic.swordv3.action.tryAgain"
+msgstr "Try Again"
+
+msgid "plugins.generic.swordv3.processingQueue"
+msgstr "Depositing {$count}"
+
+msgid "plugins.generic.swordv3.titleWithVersion"
+msgstr "({$version}) {$title}"
+
+msgid "plugins.generic.swordv3.dateDeposited"
+msgstr "Date Deposited"
+
+msgid "plugins.generic.swordv3.exportStatusDocument"
+msgstr "Export StatusDocument"

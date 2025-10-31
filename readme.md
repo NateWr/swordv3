@@ -13,9 +13,9 @@ An OJS plugin to deposit article metadata and PDF galleys with a SWORDv3 service
 - [x] Export all deposit status data to CSV
 - [x] Re-deposit rejected articles or all articles
 - [ ] Deposit to more than one service
-- [ ] Deposit individual articles manually
+- [x] Deposit individual articles manually
 - [ ] Deposit metadata in OpenAIRE/DataCite format
-- [ ] UI to view each article's deposit URL, status document and error message
+- [x] UI to view each article's deposit URL, status document and error message
 - [ ] Deposit ePub, Zip, and HTML galleys
 - [ ] Deposit articles before publication
 

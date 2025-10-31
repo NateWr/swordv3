@@ -4,6 +4,7 @@ namespace APP\plugins\generic\swordv3\classes;
 
 use APP\core\Application;
 use APP\core\Request;
+use APP\facades\Repo;
 use APP\handler\Handler;
 use APP\plugins\generic\swordv3\classes\exceptions\DepositsNotAccepted;
 use APP\plugins\generic\swordv3\classes\jobs\Deposit;
@@ -13,13 +14,14 @@ use APP\plugins\generic\swordv3\swordv3Client\exceptions\AuthenticationUnsupport
 use APP\plugins\generic\swordv3\swordv3Client\ServiceDocument;
 use APP\plugins\generic\swordv3\swordv3Client\StatusDocument;
 use APP\plugins\generic\swordv3\Swordv3Plugin;
+use APP\publication\Publication;
 use DateTime;
 use Exception;
 use GuzzleHttp\Exception\ConnectException;
 use GuzzleHttp\Exception\RequestException;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Crypt;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Support\LazyCollection;
 use PKP\security\authorization\CanAccessSettingsPolicy;
 use PKP\security\authorization\ContextAccessPolicy;
 use PKP\security\Role;
@@ -27,6 +29,22 @@ use Throwable;
 
 class SettingsHandler extends Handler
 {
+    public const STATUS_READY = 'ready';
+    public const STATUS_DEPOSITED = 'deposited';
+    public const STATUS_REJECTED = 'rejected';
+    public const STATUS_DELETED = 'deleted';
+    public const STATUS_UNKNOWN = 'unknown';
+
+    public const VALID_STATUSES = [
+        self::STATUS_READY,
+        self::STATUS_DEPOSITED,
+        self::STATUS_REJECTED,
+        self::STATUS_DELETED,
+        self::STATUS_UNKNOWN,
+    ];
+
+    public const PER_PAGE = 50;
+
     public Swordv3Plugin $plugin;
 
     public function __construct(Swordv3Plugin $plugin)
@@ -36,9 +54,12 @@ class SettingsHandler extends Handler
         $this->addRoleAssignment(
             [Role::ROLE_ID_SITE_ADMIN, Role::ROLE_ID_MANAGER],
             [
-                'add',
+                'saveServiceForm',
                 'deposit',
                 'csv',
+                'getPublications',
+                'overview',
+                'statusDocument',
                 'redeposit',
                 'reset',
             ],
@@ -59,7 +80,7 @@ class SettingsHandler extends Handler
     /**
      * Save the service setup form
      */
-    public function add($args, Request $request): void
+    public function saveServiceForm($args, Request $request): void
     {
         $params = $request->getUserVars();
 
@@ -181,6 +202,18 @@ class SettingsHandler extends Handler
      */
     public function deposit($args, Request $request): void
     {
+        if (!$request->getRequestMethod() === 'PUT') {
+            response()->json([], Response::HTTP_BAD_REQUEST)->send();
+            exit;
+        }
+
+        if (!$this->checkCSRF($request)) {
+            response()->json([
+                'error' => __('api.submissions.403.csrfTokenFailure'),
+            ], Response::HTTP_FORBIDDEN)->send();
+            exit;
+        }
+
         $context = Application::get()->getRequest()->getContext();
 
         $services = $this->plugin->getServices($context->getId());
@@ -192,15 +225,239 @@ class SettingsHandler extends Handler
         /** @var OJSService $service */
         $service = $services[0];
 
-        $collector = new Collector($context->getId());
-        $deposited = $collector->getWithDepositState(null);
+        if ($args[0]) {
+            $publicationId = (int) $args[0];
+            $publication = Repo::publication()->get($publicationId);
 
-        $collector->getAllPublications()
-            ->filter(function($row) use ($deposited) {
-                return !$deposited->contains(function($r) use ($row) {
-                    return $r->publication_id === $row->publication_id;
+            if (!$publication) {
+                response()->json([], Response::HTTP_NOT_FOUND)->send();
+                exit;
+            }
+
+            $submission = Repo::submission()->get($publication->getData('submissionId'));
+            if (!$submission || $submission->getData('contextId') !== $context->getId()) {
+                response()->json([], Response::HTTP_NOT_FOUND)->send();
+                exit;
+            }
+
+            dispatch(
+                new Deposit(
+                    $publication->getId(),
+                    $submission->getId(),
+                    $context->getId(),
+                    $service->url
+                )
+            );
+
+            response()->json([], Response::HTTP_OK)->send();
+        } else {
+
+            $collector = new Collector($context->getId());
+            $deposited = $collector->getWithDepositState(null);
+
+            $rows = $collector->getAllPublications()
+                ->filter(function($row) use ($deposited) {
+                    return (
+                        !$deposited->contains(function($r) use ($row) {
+                            return $r->publication_id === $row->publication_id;
+                        })
+                    );
+                })
+                ->each(function($row) use ($context, $service) {
+                    dispatch(
+                        new Deposit(
+                            $row->publication_id,
+                            $row->submission_id,
+                            $context->getId(),
+                            $service->url
+                        )
+                    );
                 });
+
+            response()->json(['count' => $rows->count()], Response::HTTP_OK)->send();
+        }
+    }
+
+    /**
+     * Get an overview of the deposit statuses
+     */
+    public function overview($args, Request $request): void
+    {
+        $context = $request->getContext();
+
+        $collector = new Collector($context->getId());$collector = new Collector($context->getId());
+
+        $countAll = $collector->getAllPublications()->count();
+        $allStatuses = $collector->getWithDepositState(null);
+
+        $counts = [
+            self::STATUS_READY => $countAll - $allStatuses->count(),
+            Collector::STATUS_QUEUED => 0,
+            self::STATUS_DEPOSITED => 0,
+            self::STATUS_REJECTED => 0,
+            self::STATUS_DELETED => 0,
+            self::STATUS_UNKNOWN => 0,
+        ];
+
+        $counts = $allStatuses->reduce(function($counts, $row) {
+            if (in_array($row->setting_value, [Collector::STATUS_QUEUED])) {
+                $counts[Collector::STATUS_QUEUED]++;
+            }
+            if (in_array($row->setting_value, StatusDocument::SUCCESS_STATES)) {
+                $counts[self::STATUS_DEPOSITED]++;
+            }
+            if (in_array($row->setting_value, [StatusDocument::STATE_REJECTED])) {
+                $counts[self::STATUS_REJECTED]++;
+            }
+            if (in_array($row->setting_value, [StatusDocument::STATE_DELETED])) {
+                $counts[self::STATUS_DELETED]++;
+            }
+            if (!in_array($row->setting_value, array_merge(StatusDocument::STATES, [Collector::STATUS_QUEUED]))) {
+                $counts[self::STATUS_UNKNOWN]++;
+            }
+            return $counts;
+        }, $counts);
+
+        response()->json($counts, Response::HTTP_OK)->send();
+    }
+
+    /**
+     * Get a list of publications with deposit data
+     */
+    public function getPublications($args, Request $request): void
+    {
+        $status = $args[0];
+        $page = (int) $args[1] ?? 1;
+        $context = $request->getContext();
+
+        if (!$context) {
+            response()->json([
+                'error' => __('api.404.resourceNotFound'),
+            ], Response::HTTP_NOT_FOUND)->send();
+            exit;
+        }
+
+        if (!in_array($status, self::VALID_STATUSES)) {
+            response()->json([], Response::HTTP_BAD_REQUEST)->send();
+            exit;
+        }
+
+        $publicationIds = collect([]);
+        $collector = new Collector($context->getId());
+
+        if ($status === self::STATUS_READY) {
+            $allPublished = $collector->getAllPublications();
+            $allWithStatus = $collector->getWithDepositState(null)->map(fn($row) => $row->publication_id);
+            $publicationIds = $allPublished
+                ->filter(fn($row) => !$allWithStatus->contains($row->publication_id))
+                ->map(fn($row) => $row->publication_id);
+        } else if ($status === self::STATUS_UNKNOWN) {
+            $allStates = array_merge(StatusDocument::STATES, [Collector::STATUS_QUEUED]);
+            $publicationIds = $collector->getWithDepositState(null)
+                ->filter(fn($row) => !in_array($row->setting_value, $allStates))
+                ->map(fn($row) => $row->publication_id);
+        } else {
+            $publicationIds = $collector->getWithDepositState($this->getSwordStates($status))
+                ->map(fn($row) => $row->publication_id);
+        }
+
+        $qb = Repo::publication()
+            ->getCollector()
+            ->filterByContextIds([$request->getContext()->getId()])
+            ->getQueryBuilder()
+            ->whereIn('p.publication_id', $publicationIds->values());
+
+        $publications = LazyCollection::make(function () use ($qb, $page) {
+                $rows = $qb
+                    ->limit(self::PER_PAGE)
+                    ->offset(($page - 1) * self::PER_PAGE)
+                    ->get();
+                foreach ($rows as $row) {
+                    yield $row->publication_id => Repo::publication()->dao->fromRow($row);
+                }
             })
+            ->map(function(Publication $publication) use ($request,$context) {
+                return [
+                    'id' => $publication->getId(),
+                    'title' => $publication->getLocalizedFullTitle(),
+                    'version' => $publication->getData('version'),
+                    'swordv3DateDeposited' => $publication->getData('swordv3DateDeposited'),
+                    'swordv3State' => $publication->getData('swordv3State'),
+                    'swordv3StatusDocument' => $publication->getData('swordv3StatusDocument'),
+                    'exportStatusDocumentUrl' => $request
+                        ->getDispatcher()
+                        ->url(
+                            $request,
+                            Application::ROUTE_PAGE,
+                            $context->getPath(),
+                            'swordv3',
+                            'statusDocument',
+                            [$publication->getId()],
+                        ),
+                ];
+            });
+
+        $total = $qb->count();
+
+        response()->json([
+            'publications' => $publications,
+            'total' => $total,
+        ], Response::HTTP_OK)->send();
+    }
+
+    /**
+     * Re-deposit previously deposited Publications
+     *
+     * This deposits all items or those items with the passed state.
+     * It can be used if the service configuration has changed
+     * in some way that may result in a different deposit.
+     *
+     * For example, if a service begins accepting PDF deposits it
+     * might be useful to re-deposit all publications. Or it may
+     * be useful to re-deposit all rejected publications if there
+     * was a misconfiguration with the depositing service.
+     *
+     * @param array $args
+     * @param string $args[0] Only re-deposit publications with this status. One of: rejected,deleted
+     */
+    public function redeposit($args, Request $request): void
+    {
+        if (!$request->getRequestMethod() === 'PUT') {
+            response()->json([], Response::HTTP_BAD_REQUEST)->send();
+            exit;
+        }
+
+        if (!$this->checkCSRF($request)) {
+            response()->json([
+                'error' => __('api.submissions.403.csrfTokenFailure'),
+            ], Response::HTTP_FORBIDDEN)->send();
+            exit;
+        }
+
+        $context = Application::get()->getRequest()->getContext();
+
+        $services = $this->plugin->getServices($context->getId());
+        if (!count($services)) {
+            throw new Exception('No SWORDv3 service configured for deposits.');
+        }
+
+        // TODO: support more than one service
+        /** @var OJSService $service */
+        $service = $services[0];
+
+        $states = null;
+        if (isset($args[0])) {
+            if ($args[0] === 'rejected') {
+                $states = [StatusDocument::STATE_REJECTED];
+            } else if ($args[0] === 'deleted') {
+                $states = [StatusDocument::STATE_DELETED];
+            }
+            if (is_null($states)) {
+                throw new Exception("Redeposit requested for unknown state: {$args[0]}");
+            }
+        }
+
+        $count = (new Collector($context->getId()))->getWithDepositState($states)
             ->each(function($row) use ($context, $service) {
                 dispatch(
                     new Deposit(
@@ -210,9 +467,10 @@ class SettingsHandler extends Handler
                         $service->url
                     )
                 );
-            });
+            })
+            ->count();
 
-        $request->redirect(null, 'management', 'settings', ['distribution'], null, 'swordv3');
+        response()->json(['count' => $count], Response::HTTP_OK)->send();
     }
 
     /**
@@ -256,75 +514,52 @@ class SettingsHandler extends Handler
     }
 
     /**
-     * Re-deposit previously deposited Publications
-     *
-     * This deposits all items or those items with the passed state.
-     * It can be used if the service configuration has changed
-     * in some way that may result in a different deposit.
-     *
-     * For example, if a service begins accepting PDF deposits it
-     * might be useful to re-deposit all publications. Or it may
-     * be useful to re-deposit all rejected publications if there
-     * was a misconfiguration with the depositing service.
-     *
-     * @param array $args
-     * @param string $args[0] Only re-deposit publications with this status. One of: rejected,deleted
+     * Serve the StatusDocument as a JSON file for a specific deposit
      */
-    public function redeposit($args, Request $request): void
+    public function statusDocument($args, Request $request): void
     {
         $context = Application::get()->getRequest()->getContext();
+        $publicationId = (int) $args[0];
+        $publication = Repo::publication()->get($publicationId);
 
-        $services = $this->plugin->getServices($context->getId());
-        if (!count($services)) {
-            throw new Exception('No SWORDv3 service configured for deposits.');
+        if (!$publication) {
+            response()->json([], Response::HTTP_NOT_FOUND)->send();
         }
 
-        // TODO: support more than one service
-        /** @var OJSService $service */
-        $service = $services[0];
-
-        $states = null;
-        if (isset($args[0])) {
-            if ($args[0] === 'rejected') {
-                $states = [StatusDocument::STATE_REJECTED];
-            } else if ($args[0] === 'deleted') {
-                $states = [StatusDocument::STATE_DELETED];
-            }
-            if (is_null($states)) {
-                throw new Exception("Redeposit requested for unknown state: {$args[0]}");
-            }
+        $submission = Repo::submission()->get($publication->getData('submissionId'));
+        if (!$submission || $submission->getData('contextId') !== $context->getId()) {
+            response()->json([], Response::HTTP_NOT_FOUND)->send();
         }
 
-        (new Collector($context->getId()))->getWithDepositState($states)
-            ->each(function($row) use ($context, $service) {
-                dispatch(
-                    new Deposit(
-                        $row->publication_id,
-                        $row->submission_id,
-                        $context->getId(),
-                        $service->url
-                    )
-                );
-            });
+        $statusDocument = $publication->getData('swordv3StatusDocument');
+        if (!$statusDocument) {
+            response()->json([], Response::HTTP_NOT_FOUND)->send();
 
-        $request->redirect(null, 'management', 'settings', ['distribution'], null, 'swordv3');
+        }
 
+        $filename = 'swordv3-status-' . $publicationId . '-' . (new DateTime())->format('Y-m-d-h-i') . '.json';
+
+        header('Content-Description: File Transfer');
+        header('Content-type: application/json');
+        header("Content-Disposition: attachment; filename={$filename}");
+        echo $statusDocument;
     }
 
     /**
-     * Temporary method to delete all swordv3 deposit data from submissions
+     * Return the SWORDv3 state that matches on of the statuses
+     * used in our UI
      *
-     * TODO: REMOVE THIS
+     * @param string $status One of the self::STATUS_* constants
+     * @return string[] List of StatusDocument::STATE_* constants
      */
-    public function reset($args, Request $request): void
+    protected function getSwordStates(string $status): array
     {
-        DB::table('publication_settings')
-            ->whereLike('setting_name', '%swordv3%')
-            ->delete();
-        DB::table('publication_galley_settings')
-            ->whereLike('setting_name', '%swordv3%')
-            ->delete();
-        $request->redirect(null, 'management', 'settings', ['distribution'], null, 'swordv3');
+        switch ($status) {
+            case SELF::STATUS_DEPOSITED: return StatusDocument::SUCCESS_STATES;
+            case SELF::STATUS_REJECTED: return [StatusDocument::STATE_REJECTED];
+            case SELF::STATUS_DELETED: return [StatusDocument::STATE_DELETED];
+        }
+        return [];
     }
 
     /**
@@ -337,5 +572,18 @@ class SettingsHandler extends Handler
             service: $service,
         );
         return $client->getServiceDocument();
+    }
+
+    /**
+     * Check the CSRF token as it is passed by the useFetch
+     * composable for API requests
+     */
+    protected function checkCSRF(Request $request): bool
+    {
+        $csrf = isset($_SERVER['HTTP_X_CSRF_TOKEN'])
+            ? $_SERVER['HTTP_X_CSRF_TOKEN']
+            : null;
+
+        return $csrf === $request->getSession()->token();
     }
 }

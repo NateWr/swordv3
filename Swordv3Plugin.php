@@ -3,7 +3,6 @@
 namespace APP\plugins\generic\swordv3;
 
 use APP\core\Application;
-use APP\plugins\generic\swordv3\classes\Collector;
 use APP\plugins\generic\swordv3\classes\listeners\DepositPublication;
 use APP\plugins\generic\swordv3\classes\OJSService;
 use APP\plugins\generic\swordv3\classes\ServiceForm;
@@ -11,7 +10,7 @@ use APP\plugins\generic\swordv3\classes\SettingsHandler;
 use APP\plugins\generic\swordv3\classes\task\CheckInProgressDeposits;
 use APP\plugins\generic\swordv3\swordv3Client\auth\APIKey;
 use APP\plugins\generic\swordv3\swordv3Client\auth\Basic;
-use APP\plugins\generic\swordv3\swordv3Client\StatusDocument;
+use APP\template\TemplateManager;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Event;
 use PKP\core\PKPApplication;
@@ -37,6 +36,7 @@ class Swordv3Plugin extends GenericPlugin implements HasTaskScheduler
                 PublicationPublished::class,
                 DepositPublication::class,
             );
+            $this->loadScripts();
         }
         return $success;
     }
@@ -96,7 +96,7 @@ class Swordv3Plugin extends GenericPlugin implements HasTaskScheduler
         }
 
         $addForm = new ServiceForm(
-            $dispatcher->url($request, PKPApplication::ROUTE_PAGE, $context->getPath(), 'swordv3', 'add'),
+            $dispatcher->url($request, PKPApplication::ROUTE_PAGE, $context->getPath(), 'swordv3', 'saveServiceForm'),
             [['key' => $primaryLocale, 'label' => $primaryLocale]],
             $context,
             $service,
@@ -105,6 +105,33 @@ class Swordv3Plugin extends GenericPlugin implements HasTaskScheduler
         $components = $templateMgr->getState('components');
         $components[$addForm->id] = $addForm->getConfig();
         $templateMgr->setState(['components' => $components]);
+
+        $services = $this->getServices($context->getId());
+
+        $state = [
+            'enabled' => false,
+        ];
+        if (count($services)) {
+            $state = array_merge(
+                $state,
+                [
+                    'enabled' => true,
+                    'exportCsvUrl' => $request
+                        ->getDispatcher()
+                        ->url(
+                            $request,
+                            PKPApplication::ROUTE_PAGE,
+                            $context->getPath(),
+                            'swordv3',
+                            'csv'
+                        ),
+                    'itemsPerPage' => SettingsHandler::PER_PAGE,
+                    'serviceName' => $services[0]->name,
+                ]
+            );
+        }
+
+        $templateMgr->setState(['swordv3' => $state]);
 
         return false;
     }
@@ -118,30 +145,10 @@ class Swordv3Plugin extends GenericPlugin implements HasTaskScheduler
         $context = $request->getContext();
 
         $services = $this->getServices($context->getId());
-        if (!count($services)) {
-            $templateMgr->assign([
-                'swordv3Configured' => false,
-            ]);
-        } else {
-            $collector = new Collector($context->getId());
 
-            $countAll = $collector->getAllPublications()->count();
-            $allStatuses = $collector->getWithDepositState(null);
-
-            $deposited = $allStatuses->filter(fn($p) => in_array($p->setting_value, StatusDocument::SUCCESS_STATES))->count();
-            $rejected = $allStatuses->filter(fn($p) => in_array($p->setting_value, [StatusDocument::STATE_REJECTED]))->count();
-            $deleted = $allStatuses->filter(fn($p) => in_array($p->setting_value, [StatusDocument::STATE_DELETED]))->count();
-            $unknown = $allStatuses->filter(fn($p) => !in_array($p->setting_value, StatusDocument::STATES))->count();
-
-            $templateMgr->assign([
-                'swordv3Configured' => true,
-                'notDeposited' => $countAll - $allStatuses->count(),
-                'deposited' => $deposited,
-                'rejected' => $rejected,
-                'deleted' => $deleted,
-                'unknown' => $unknown,
-            ]);
-        }
+        $templateMgr->assign([
+            'swordv3Configured' => count($services) >= 1,
+        ]);
 
         $output .= $templateMgr->fetch($this->getTemplateResource('settings.tpl'));
 
@@ -223,5 +230,27 @@ class Swordv3Plugin extends GenericPlugin implements HasTaskScheduler
             ->daily()
             ->name(CheckInProgressDeposits::class)
             ->withoutOverlapping();
+    }
+
+    protected function loadScripts(): void
+    {
+        $request = Application::get()->getRequest();
+        $templateMgr = TemplateManager::getManager($request);
+
+        $templateMgr->addJavaScript(
+            'swordv3',
+            "{$request->getBaseUrl()}/{$this->getPluginPath()}/public/build/build.iife.js",
+            [
+                'contexts' => ['backend-management-settings'],
+                'priority' => TemplateManager::STYLE_SEQUENCE_LAST,
+            ]
+        );
+        $templateMgr->addStyleSheet(
+            'swordv3',
+            "{$request->getBaseUrl()}/{$this->getPluginPath()}/public/build/build.css",
+            [
+                'contexts' => ['backend-management-settings'],
+            ]
+        );
     }
 }
